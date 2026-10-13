@@ -123,6 +123,9 @@ class LiveMapViewModel @Inject constructor(
     private val routeRetryAtMs = ConcurrentHashMap<String, Long>()   // a line the server had no route for
     private val routeSemaphore = Semaphore(5)          // cap parallel route requests
     @Volatile private var routeScope: String? = null   // city id, or "box:lat,lon"
+    // False while the city's route set is still loading: until then every line looks missing.
+    @Volatile private var routeSetReady = false
+    @Volatile private var wantedRouteKeys: Set<String> = emptySet()   // what the Map last asked for
     private val _routes = MutableStateFlow<Map<String, List<DoubleArray>>>(emptyMap())
     val routes: StateFlow<Map<String, List<DoubleArray>>> = _routes.asStateFlow()
 
@@ -295,6 +298,7 @@ class LiveMapViewModel @Inject constructor(
         }
         if (scope == routeScope) return
         routeScope = scope
+        routeSetReady = false
         routeByKey.clear()
         routeInFlight.clear()
         routeRetryAtMs.clear()
@@ -304,11 +308,15 @@ class LiveMapViewModel @Inject constructor(
         routeByKey.putAll(routeStore.cached(scope))
         publishRoutes()
         viewModelScope.launch {
-            val fresh = routeStore.refreshIfStale(scope) ?: return@launch
-            if (routeScope == scope) {
+            val fresh = routeStore.refreshIfStale(scope)
+            if (routeScope != scope) return@launch
+            if (fresh != null) {
                 routeByKey.putAll(fresh)
                 publishRoutes()
             }
+            // Only now is it known which lines the set lacks.
+            routeSetReady = true
+            ensureRoutes(wantedRouteKeys)
         }
     }
 
@@ -322,7 +330,11 @@ class LiveMapViewModel @Inject constructor(
      * route itself, so outside the supported cities no routes are drawn.
      */
     fun ensureRoutes(keys: Set<String>) {
+        wantedRouteKeys = keys
         val scope = routeScope?.takeUnless { it.startsWith("box:") } ?: return
+        // While the city's set is still loading, every line would look missing and be
+        // asked for one by one: wait, prepareRoutes calls this again when it is there.
+        if (!routeSetReady) return
         val segs = live.segments
         val now = System.currentTimeMillis()
         val reps = LinkedHashMap<String, LiveSegment>()   // key -> a vehicle on that line

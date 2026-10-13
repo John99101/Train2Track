@@ -51,6 +51,10 @@ final class LiveMapViewModel: ObservableObject {
     /// A line the server had no route for: when it may be asked again.
     private var routeRetryAt: [String: Date] = [:]
     private var routeScope: String?
+    /// False while the city's route set is still loading: until then every line looks missing.
+    private var routeSetReady = false
+    /// What the Map last asked for.
+    private var wantedRouteKeys: Set<String> = []
     private var runningRouteFetches = 0
     private var routeQueue: [(key: String, seg: LiveSegment, scope: String?)] = []
 
@@ -216,6 +220,7 @@ final class LiveMapViewModel: ObservableObject {
         }
         if scope == routeScope { return }
         routeScope = scope
+        routeSetReady = false
         routeByKey = [:]
         routeInFlight = []
         routeRetryAt = [:]
@@ -228,10 +233,15 @@ final class LiveMapViewModel: ObservableObject {
             guard let self, self.routeScope == scope else { return }
             self.routeByKey.merge(saved) { _, new in new }
             self.routes = self.routeByKey
-            if let fresh = await RouteStore.shared.refreshIfStale(scope), self.routeScope == scope {
+            let fresh = await RouteStore.shared.refreshIfStale(scope)
+            guard self.routeScope == scope else { return }
+            if let fresh {
                 self.routeByKey.merge(fresh) { _, new in new }
                 self.routes = self.routeByKey
             }
+            // Only now is it known which lines the set lacks.
+            self.routeSetReady = true
+            self.ensureRoutes(self.wantedRouteKeys)
         }
     }
 
@@ -241,8 +251,12 @@ final class LiveMapViewModel: ObservableObject {
     /// that line, and saved for the city. The app never asks the timetable service
     /// for a route itself, so outside the supported cities no routes are drawn.
     func ensureRoutes(_ keys: Set<String>) {
+        wantedRouteKeys = keys
         // Only inside a supported city (nil or a free map area: nothing to fetch).
         guard routeScope?.hasPrefix("box:") == false else { return }
+        // While the city's set is still loading, every line would look missing and be
+        // asked for one by one: wait, prepareRoutes calls this again when it is there.
+        guard routeSetReady else { return }
         let now = Date()
         for key in keys {
             if routeByKey[key] != nil || routeInFlight.contains(key) { continue }

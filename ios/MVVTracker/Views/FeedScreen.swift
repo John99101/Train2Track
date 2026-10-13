@@ -128,7 +128,8 @@ struct FeedScreen: View {
             }
             .sheet(item: $selectedTrain) {
                 // Every train in the Feed belongs to the selected city.
-                ReportScreen(train: $0, ticketURL: selectedCity.ticketURL, reportCity: selectedCity.id)
+                ReportScreen(train: $0, ticketURL: selectedCity.ticketURL, reportCity: selectedCity.id,
+                             reports: reports)
             }
         }
     }

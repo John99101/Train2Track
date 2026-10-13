@@ -38,6 +38,9 @@
 "movement_entered" = "On board";
 "movement_exited" = "Has left";
 "report_submit" = "Submit report";
+"report_made_now" = "Reported just now";
+"report_made_minutes" = "Reported %d min ago";
+"report_made_station" = "at %@";
 "report_legal_note" = "This app is an information service only. It does not help avoid fares or inspections. Always carry a valid ticket for your journey.";
 "buy_ticket" = "Buy a valid ticket";
 "delay_on_time" = "On time";

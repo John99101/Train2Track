@@ -70,7 +70,7 @@ struct MapScreen: View {
             .onChange(of: vm.reportCities) { _, cities in reports.start(cities: cities) }
             .sheet(item: $selected) { train in
                 ReportScreen(train: train, ticketURL: citySelection.city.ticketURL,
-                             reportCity: vm.reportCity(for: train))
+                             reportCity: vm.reportCity(for: train), reports: reports)
             }
         }
     }

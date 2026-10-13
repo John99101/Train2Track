@@ -4,15 +4,24 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.view.MotionEvent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,14 +29,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mvvtracker.app.R
 import androidx.compose.ui.viewinterop.AndroidView
@@ -36,11 +50,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mvvtracker.app.data.live.routeKey
+import com.mvvtracker.app.ui.components.ReportRed
 import com.mvvtracker.app.viewmodel.LiveMapViewModel
 import com.mvvtracker.app.viewmodel.TrainPosition
 import kotlinx.coroutines.channels.Channel
 import kotlin.math.abs
 import org.osmdroid.events.DelayedMapListener
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
@@ -48,13 +64,16 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.Projection
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.advancedpolyline.MonochromaticPaintList
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 internal const val TRAIN_TAG = "train"
-internal const val ROUTE_TAG = "route"
 
 /**
  * CARTO "Voyager" basemap - a clean OSM-based style, kept ready but NOT active:
@@ -74,6 +93,29 @@ private val CARTO_VOYAGER = XYTileSource(
     "© OpenStreetMap contributors © CARTO"
 )
 
+/**
+ * The OpenStreetMap tiles are recoloured on the phone to a pale, mostly grey map,
+ * so the vehicles and route lines stand out. Nothing else about the tiles changes.
+ */
+private val PALE_MAP: ColorFilter = ColorMatrixColorFilter(
+    ColorMatrix().apply {
+        setSaturation(PALE_MAP_SATURATION)
+        postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    PALE_MAP_CONTRAST, 0f, 0f, 0f, PALE_MAP_LIFT,
+                    0f, PALE_MAP_CONTRAST, 0f, 0f, PALE_MAP_LIFT,
+                    0f, 0f, PALE_MAP_CONTRAST, 0f, PALE_MAP_LIFT,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        )
+    }
+)
+private const val PALE_MAP_SATURATION = 0.3f
+private const val PALE_MAP_CONTRAST = 0.78f   // darkest text becomes dark grey ...
+private const val PALE_MAP_LIFT = 56f         // ... and white stays white (0.78 * 255 + 56)
+
 @Composable
 fun LiveTrainMap(
     liveViewModel: LiveMapViewModel,
@@ -88,6 +130,7 @@ fun LiveTrainMap(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val density = context.resources.displayMetrics.density
 
     val trains by liveViewModel.trains.collectAsStateWithLifecycle()
     val loadError by liveViewModel.loadError.collectAsStateWithLifecycle()
@@ -101,15 +144,53 @@ fun LiveTrainMap(
         onStopOrDispose { liveViewModel.pause() }
     }
 
+    // Persistent overlays reused across position ticks (see update below): moving a
+    // marker or keeping a static route line is far cheaper than rebuilding them all
+    // every tick. Two layers, so the routes always stay under the vehicles.
+    val routeLayer = remember { Layer<Polyline>(tappable = false) }
+    val vehicleLayer = remember { Layer<Marker>(tappable = true) }
+    val routeLines = remember { HashMap<String, RouteLine>() }
+    val badges = remember { HashMap<String, Badge>() }
+    val drawn = remember { DrawnStyle() }
+
+    // The badge size and line width follow the zoom; a tapped line is shown in full colour.
+    var tier by remember { mutableStateOf(zoomTier(START_ZOOM)) }
+    var selectedRoute by remember { mutableStateOf<String?>(null) }
+
     val mapView = remember {
         MapView(context).apply {
             // Free OpenStreetMap tiles. To use the (paid, commercial) CARTO style
             // instead, swap this for setTileSource(CARTO_VOYAGER).
             setTileSource(TileSourceFactory.MAPNIK)
+            overlayManager.tilesOverlay.setColorFilter(PALE_MAP)
             setMultiTouchControls(true)
             setUseDataConnection(true)
-            controller.setZoom(12.0)
+            controller.setZoom(START_ZOOM)
             controller.setCenter(GeoPoint(centerLat, centerLon))
+            // Lowest overlay, so it only gets the taps no vehicle took: a tap on a
+            // route line shows that line in full colour, a tap elsewhere ends it.
+            // Lines that share a track lie on top of each other: tapping the same
+            // spot again goes on to the next one.
+            val map = this
+            overlays.add(MapEventsOverlay(object : MapEventsReceiver {
+                override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                    val tolerance = (LINE_TAP_DP * density).toDouble()
+                    val hits = drawn.routeOrder.asReversed()
+                        .filter { it.line.isCloseTo(p, tolerance, map) }
+                        .map { it.key }
+                    val at = hits.indexOf(selectedRoute)
+                    selectedRoute = when {
+                        hits.isEmpty() -> null
+                        hits.size == 1 && at == 0 -> null   // the only line here, tapped again
+                        else -> hits[(at + 1) % hits.size]
+                    }
+                    return hits.isNotEmpty()
+                }
+
+                override fun longPressHelper(p: GeoPoint): Boolean = false
+            }))
+            overlays.add(routeLayer)
+            overlays.add(vehicleLayer)
             onResume()
         }
     }
@@ -130,8 +211,10 @@ fun LiveTrainMap(
             north = centerLat + 0.10, south = centerLat - 0.10,
             east = centerLon + 0.16, west = centerLon - 0.16
         )
-        mapView.controller.setZoom(12.0)
+        selectedRoute = null   // another city: its lines are other lines
+        mapView.controller.setZoom(START_ZOOM)
         mapView.controller.setCenter(GeoPoint(centerLat, centerLon))
+        tier = zoomTier(START_ZOOM)
         mapView.post { reportBounds() }
     }
 
@@ -156,6 +239,14 @@ fun LiveTrainMap(
             override fun onZoom(event: ZoomEvent?): Boolean { reportBounds(); return false }
         }
         mapView.addMapListener(DelayedMapListener(listener, 300))
+        // Not delayed: the badges and lines change size as soon as the zoom has changed.
+        mapView.addMapListener(object : MapListener {
+            override fun onScroll(event: ScrollEvent?): Boolean = false
+            override fun onZoom(event: ZoomEvent?): Boolean {
+                tier = zoomTier(event?.zoomLevel ?: mapView.zoomLevelDouble)
+                return false
+            }
+        })
         mapView.addOnFirstLayoutListener { _, _, _, _, _ -> reportBounds() }
         mapView.post { reportBounds() }
         onDispose { }
@@ -167,12 +258,18 @@ fun LiveTrainMap(
     val shownRouteKeys = remember(shown) { shown.mapTo(HashSet()) { routeKey(it.mode, it.label) } }
     LaunchedEffect(shownRouteKeys) { liveViewModel.ensureRoutes(shownRouteKeys) }
 
-    // Persistent overlays reused across position ticks (see update below): moving a
-    // marker or keeping a static route line is far cheaper than rebuilding them all
-    // every tick.
-    val markerCache = remember { HashMap<String, Marker>() }
-    val markerFlagged = remember { HashMap<String, Boolean>() }
-    val routeCache = remember { HashMap<String, Polyline>() }
+    // Reported vehicles inside the visible part of the map, in a fixed order so the
+    // chip below can step through them. (Recomputed with every position tick.)
+    val reportsInView =
+        // (No reports, or the map has no size yet: nothing to look for.)
+        if (flaggedTripIds.isEmpty() || mapView.width == 0) emptyList()
+        else {
+            val visibleBox = mapView.boundingBox
+            shown
+                .filter { it.tripId != null && it.tripId in flaggedTripIds && visibleBox.contains(it.latitude, it.longitude) }
+                .sortedBy { it.tripId }
+        }
+    val lastJump = remember { mutableStateOf<String?>(null) }
 
     // Smooth movement: each tick gives every train a new target; the frame loop
     // below slides the marker from where it is drawn now to that target over one
@@ -197,7 +294,7 @@ fun LiveTrainMap(
                     lastDraw = now
                     glides.forEach { (key, g) ->
                         // In place: no new objects per frame (osmdroid draws from it directly).
-                        markerCache[key]?.position?.setCoords(
+                        badges[key]?.marker?.position?.setCoords(
                             g.fromLat + (g.toLat - g.fromLat) * t,
                             g.fromLon + (g.toLon - g.fromLon) * t
                         )
@@ -231,8 +328,6 @@ fun LiveTrainMap(
             factory = { mapView },
             modifier = Modifier.fillMaxSize(),
             update = { mv ->
-                val density = context.resources.displayMetrics.density
-
                 // ROUTES (persistent): one full line per shown line with a cached
                 // route. Static, so add once and keep across ticks; only add newly
                 // shown lines and drop ones no longer shown.
@@ -241,29 +336,44 @@ fun LiveTrainMap(
                     val k = routeKey(t.mode, t.label)
                     if (routes.containsKey(k)) repByRoute.putIfAbsent(k, t)
                 }
+                var routesChanged = false
                 repByRoute.forEach { (k, rep) ->
-                    if (!routeCache.containsKey(k)) {
-                        val pl = routeOverlay(rep, routes.getValue(k), density)
-                        routeCache[k] = pl
-                        mv.overlays.add(0, pl)   // keep routes under the markers
+                    if (!routeLines.containsKey(k)) {
+                        routeLines[k] = RouteLine(k, rep, routes.getValue(k), density)
+                        routesChanged = true
                     }
                 }
-                (routeCache.keys - repByRoute.keys).toList().forEach { k ->
-                    routeCache.remove(k)?.let { mv.overlays.remove(it) }
+                (routeLines.keys - repByRoute.keys).toList().forEach { k ->
+                    routeLines.remove(k)
+                    routesChanged = true
+                }
+                // Width by zoom, pale unless tapped; the tapped line lies on top, below
+                // it S-Bahn and U-Bahn over rail over tram over bus.
+                if (routesChanged || drawn.tier != tier || drawn.selectedRoute != selectedRoute) {
+                    routeLines.values.forEach { it.style(tier, it.key == selectedRoute, density) }
+                    drawn.routeOrder = routeLines.values.sortedWith(
+                        compareBy<RouteLine>({ it.key == selectedRoute }, { it.rank }, { it.key })
+                    )
+                    routeLayer.items = drawn.routeOrder.map { it.line }
                 }
 
                 // TRAIN MARKERS (reused): move existing markers, add new ones, drop
                 // gone ones — instead of recreating every marker each tick.
                 val shownByKey = LinkedHashMap<String, TrainPosition>()
                 shown.forEach { shownByKey[trainKey(it)] = it }
+                var orderChanged = false
                 glides.clear()
                 shownByKey.forEach { (key, train) ->
                     val flagged = train.tripId != null && train.tripId in flaggedTripIds
-                    val existing = markerCache[key]
+                    // A reported vehicle keeps the full badge at every zoom.
+                    val size = if (flagged) ZoomTier.NEAR else tier
+                    val rank = drawRank(train.mode, flagged)
+                    val existing = badges[key]
                     if (existing != null) {
+                        val marker = existing.marker
                         // Glide from where it is drawn now; a big jump (new data put the
                         // train somewhere else entirely) snaps instead of sliding across.
-                        val from = existing.position
+                        val from = marker.position
                         if (abs(from.latitude - train.latitude) < SNAP_DEGREES &&
                             abs(from.longitude - train.longitude) < SNAP_DEGREES
                         ) {
@@ -273,50 +383,97 @@ fun LiveTrainMap(
                         }
                         // Keep the live/schedule-only fade in sync (cheap — no bitmap
                         // re-render), in case the trip gains or loses its real-time feed.
-                        existing.alpha = if (train.isRealtime) 0.85f else 0.4f
-                        // Re-render the badge only when the report state actually flips,
-                        // so a train that gets reported shows the "!" (and clears it).
-                        if (markerFlagged[key] != flagged) {
-                            existing.icon = trainBadgeFor(context, train, flagged)
-                            markerFlagged[key] = flagged
+                        marker.alpha = badgeAlpha(train, flagged)
+                        // Re-render the badge only when the report state flips or the
+                        // zoom asks for another size.
+                        if (existing.flagged != flagged || existing.size != size) {
+                            marker.icon = trainBadgeFor(context, train, flagged, size)
+                            existing.flagged = flagged
+                            existing.size = size
                         }
-                        existing.setOnMarkerClickListener { _, _ ->
+                        if (existing.rank != rank) {
+                            existing.rank = rank
+                            orderChanged = true
+                        }
+                        marker.setOnMarkerClickListener { _, _ ->
                             onTrainClick(train.label, train.tripId, train.fromStop ?: train.toStop, train.mode, train.city)
                             true
                         }
                     } else {
-                        val m = trainMarker(mv, context, train, flagged, onTrainClick)
-                        markerCache[key] = m
-                        markerFlagged[key] = flagged
-                        mv.overlays.add(m)
+                        val m = trainMarker(mv, context, train, flagged, size, onTrainClick)
+                        badges[key] = Badge(key, m, flagged, size, rank)
+                        orderChanged = true
                     }
                 }
-                (markerCache.keys - shownByKey.keys).toList().forEach { key ->
-                    markerCache.remove(key)?.let { mv.overlays.remove(it) }
-                    markerFlagged.remove(key)
+                (badges.keys - shownByKey.keys).toList().forEach { key ->
+                    badges.remove(key)
+                    orderChanged = true
+                }
+                // Later in the list = drawn on top and tapped first.
+                if (orderChanged) {
+                    vehicleLayer.items = badges.values
+                        .sortedWith(compareBy<Badge>({ it.rank }, { it.key }))
+                        .map { it.marker }
                 }
                 if (glides.isNotEmpty()) glideSignal.trySend(Unit)
 
+                drawn.tier = tier
+                drawn.selectedRoute = selectedRoute
                 mv.invalidate()
             }
         )
 
-        Surface(
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            shape = MaterialTheme.shapes.small,
-            modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
-        ) {
-            Text(
-                text = when {
-                    loadError && shown.isEmpty() -> stringResource(R.string.feed_unavailable)
-                    shown.isEmpty() -> stringResource(R.string.map_loading)
-                    // Our server is unreachable or serves an older snapshot.
-                    dataDelayed -> stringResource(R.string.map_trains_delayed, shown.size)
-                    else -> stringResource(R.string.map_trains_live, shown.size)
-                },
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            )
+        Column(modifier = Modifier.align(Alignment.TopStart).padding(12.dp)) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(
+                    text = when {
+                        loadError && shown.isEmpty() -> stringResource(R.string.feed_unavailable)
+                        shown.isEmpty() -> stringResource(R.string.map_loading)
+                        // Our server is unreachable or serves an older snapshot.
+                        dataDelayed -> stringResource(R.string.map_trains_delayed, shown.size)
+                        else -> stringResource(R.string.map_trains_live, shown.size)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+
+            // Reports in the visible part of the map; a tap moves the map to the next one.
+            if (reportsInView.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    color = ReportRed,
+                    shape = MaterialTheme.shapes.small,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.clickable {
+                        val at = reportsInView.indexOfFirst { it.tripId == lastJump.value }
+                        val next = reportsInView[(at + 1) % reportsInView.size]
+                        lastJump.value = next.tripId
+                        mapView.controller.animateTo(GeoPoint(next.latitude, next.longitude))
+                    }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            "!",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            pluralStringResource(R.plurals.map_reports_in_view, reportsInView.size, reportsInView.size),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
         }
 
         // The credit OpenStreetMap asks for; a tap opens its copyright page.
@@ -344,39 +501,109 @@ private fun trainKey(t: TrainPosition): String =
 /** One marker's slide from its drawn position to its newest position. */
 private class Glide(val fromLat: Double, val fromLon: Double, val toLat: Double, val toLon: Double)
 
+/** A vehicle's marker and how it is drawn right now. */
+private class Badge(val key: String, val marker: Marker, var flagged: Boolean, var size: ZoomTier, var rank: Int)
+
+/** What the map's update block last applied, so it only restyles when something changed. */
+private class DrawnStyle {
+    var tier: ZoomTier? = null
+    var selectedRoute: String? = null
+    /** The route lines in draw order, the top one last. */
+    var routeOrder: List<RouteLine> = emptyList()
+}
+
+/**
+ * A group of overlays drawn in list order (the last one on top). Taps go to the top
+ * one first, or to none when the layer is not [tappable].
+ */
+private class Layer<T : Overlay>(private val tappable: Boolean) : Overlay() {
+    var items: List<T> = emptyList()
+
+    override fun draw(canvas: Canvas, projection: Projection) {
+        for (i in items.indices) items[i].draw(canvas, projection)
+    }
+
+    override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
+        if (!tappable) return false
+        for (i in items.indices.reversed()) {
+            if (items[i].onSingleTapConfirmed(e, mapView)) return true
+        }
+        return false
+    }
+
+    override fun onDetach(mapView: MapView) {
+        items.forEach { it.onDetach(mapView) }
+        items = emptyList()
+    }
+}
+
 // One glide spans one position tick, so consecutive glides join into steady motion.
 private const val GLIDE_MILLIS = LiveMapViewModel.TICK_MILLIS
 private const val FRAME_MIN_MILLIS = 30L
 // ~2 km: further than a train moves in a tick, so this is a data jump, not motion.
 private const val SNAP_DEGREES = 0.02
 
+// Route lines: a white edge on each side, pale unless tapped, a little wider when tapped.
+private const val LINE_EDGE_DP = 1f
+private const val PALE_LINE_ALPHA = 150
+private const val SELECTED_EXTRA_DP = 1.5f
+// How far from a line a tap still counts as a tap on it.
+private const val LINE_TAP_DP = 14f
+
 /** The badge drawable for a train: line colour, rounded-square (rail) or pill
- *  (bus/tram), with a red "!" corner when [flagged]. */
-private fun trainBadgeFor(context: Context, train: TrainPosition, flagged: Boolean): Drawable =
+ *  (bus/tram), in the size the zoom asks for; with a red ring and "!" when [flagged]. */
+private fun trainBadgeFor(context: Context, train: TrainPosition, flagged: Boolean, size: ZoomTier): Drawable =
     trainBadge(
         context,
         trainColorArgb(train.colorHex, train.label, train.mode),
         train.label,
         flagged,
-        train.mode == "BUS" || train.mode == "TRAM"
+        train.mode == "BUS" || train.mode == "TRAM",
+        size
     )
 
 /**
- * The route line for one line, in the line's colour and with a per-mode stroke
- * style: S-Bahn solid, U-Bahn dashed, Tram dotted, Bus dash-dot.
+ * Real-time-backed trains are near-solid; schedule-only trains (no live feed —
+ * drawn where they *should* be, not where they are) are faded so the user can tell
+ * the difference at a glance (Phase 6 / Option 1). A reported vehicle is never faded.
  */
-private fun routeOverlay(train: TrainPosition, points: List<DoubleArray>, density: Float): Polyline {
-    return Polyline().apply {
-        relatedObject = ROUTE_TAG
+private fun badgeAlpha(train: TrainPosition, flagged: Boolean): Float = when {
+    flagged -> 1f
+    train.isRealtime -> 0.85f
+    else -> 0.4f
+}
+
+/**
+ * The route line of one line: a white edge underneath, the line's colour on top,
+ * with a per-mode stroke style (S-Bahn solid, U-Bahn dashed, Tram dotted, Bus
+ * dash-dot).
+ */
+private class RouteLine(val key: String, train: TrainPosition, points: List<DoubleArray>, density: Float) {
+    val rank = drawRank(train.mode)
+    private val edge = linePaint(Color.WHITE)
+    private val fill = linePaint(trainColorArgb(train.colorHex, train.label, train.mode)).apply {
+        pathEffect = dashForMode(train.mode, density)
+    }
+    val line = Polyline().apply {
         setPoints(points.map { GeoPoint(it[0], it[1]) })
-        outlinePaint.color = trainColorArgb(train.colorHex, train.label, train.mode)
-        outlinePaint.alpha = 200
-        outlinePaint.strokeWidth = 5f * density
-        outlinePaint.strokeCap = Paint.Cap.ROUND
-        outlinePaint.strokeJoin = Paint.Join.ROUND
-        outlinePaint.pathEffect = dashForMode(train.mode, density)
-        // Don't let the line swallow taps meant for the train badges on top of it.
-        setOnClickListener { _, _, _ -> false }
+        // Drawn one after the other: first the edge, then the colour on top of it.
+        outlinePaintLists.add(MonochromaticPaintList(edge))
+        outlinePaintLists.add(MonochromaticPaintList(fill))
+    }
+
+    fun style(tier: ZoomTier, selected: Boolean, density: Float) {
+        val width = lineWidthDp(tier) + if (selected) SELECTED_EXTRA_DP else 0f
+        fill.strokeWidth = width * density
+        // Over the white edge a see-through colour is a paler colour.
+        fill.alpha = if (selected) 255 else PALE_LINE_ALPHA
+        edge.strokeWidth = (width + 2f * LINE_EDGE_DP) * density
+    }
+
+    private fun linePaint(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
 }
 
@@ -393,16 +620,14 @@ private fun trainMarker(
     context: Context,
     train: TrainPosition,
     flagged: Boolean,
+    size: ZoomTier,
     onTrainClick: (String, String?, String?, String?, String) -> Unit
 ): Marker {
     return Marker(mapView).apply {
         position = GeoPoint(train.latitude, train.longitude)
         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-        icon = trainBadgeFor(context, train, flagged)
-        // Real-time-backed trains are near-solid; schedule-only trains (no live
-        // feed — drawn where they *should* be, not where they are) are faded so
-        // the user can tell the difference at a glance (Phase 6 / Option 1).
-        alpha = if (train.isRealtime) 0.85f else 0.4f
+        icon = trainBadgeFor(context, train, flagged, size)
+        alpha = badgeAlpha(train, flagged)
         title = train.label
         relatedObject = TRAIN_TAG
         // Tapping a train opens the Report screen for exactly that train.
@@ -446,32 +671,41 @@ private val MUNICH_LINE_COLORS: Map<String, Int> = mapOf(
 // Cache the (relatively expensive) badge bitmaps; wrappers are cheap per marker.
 private val badgeBitmaps = HashMap<String, Bitmap>()
 
-private fun trainBadge(context: Context, color: Int, label: String, flagged: Boolean, elongated: Boolean): Drawable {
-    val key = "$color|$label|$flagged|$elongated"
-    val bitmap = badgeBitmaps.getOrPut(key) { createBadgeBitmap(context, color, label, flagged, elongated) }
+private fun trainBadge(
+    context: Context, color: Int, label: String, flagged: Boolean, elongated: Boolean, size: ZoomTier
+): Drawable {
+    // A dot shows no label, so all lines of one colour share one bitmap.
+    val key = if (size == ZoomTier.FAR) "dot|$color|$elongated" else "$color|$label|$flagged|$elongated|$size"
+    val bitmap = badgeBitmaps.getOrPut(key) {
+        val density = context.resources.displayMetrics.density
+        if (size == ZoomTier.FAR) createDotBitmap(density, color, elongated)
+        else createBadgeBitmap(density, color, label, flagged, elongated, small = size == ZoomTier.MID)
+    }
     return BitmapDrawable(context.resources, bitmap)
 }
 
 /**
  * A line badge: a **rounded square** for rail (S-/U-Bahn and other trains) or an
  * **elongated roundel** (pill) for bus/tram. Sized to the label so longer bus
- * numbers still fit; a red "!" corner badge marks a flagged trip.
+ * numbers still fit; [small] is the size for a map that is zoomed out a little. A
+ * reported trip ([flagged]) gets a red ring around the whole badge and a red "!".
  */
-private fun createBadgeBitmap(context: Context, color: Int, label: String, flagged: Boolean, elongated: Boolean): Bitmap {
-    val density = context.resources.displayMetrics.density
+private fun createBadgeBitmap(
+    density: Float, color: Int, label: String, flagged: Boolean, elongated: Boolean, small: Boolean
+): Bitmap {
     val text = label.take(if (elongated) 5 else 4)
 
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
-        textSize = 9f * density
+        textSize = (if (small) 7f else 9f) * density
     }
 
-    val height = 22f * density
-    val padH = (if (elongated) 8f else 5f) * density
-    val shapeW = if (elongated) (paint.measureText(text) + 2f * padH).coerceAtLeast(height * 1.6f)
-                 else height
-    val margin = 3f * density   // room for the "!" corner badge to overflow
+    val height = (if (small) 16f else 22f) * density
+    val padH = (if (elongated) (if (small) 5.5f else 8f) else (if (small) 2.5f else 3.5f)) * density
+    val shapeW = (paint.measureText(text) + 2f * padH).coerceAtLeast(if (elongated) height * 1.6f else height)
+    // Room around the shape: for its outline, or for the ring and the "!" of a report.
+    val margin = (if (flagged) REPORT_MARGIN_DP else 3f) * density
     val bmpW = (shapeW + 2f * margin).toInt().coerceAtLeast(1)
     val bmpH = (height + 2f * margin).toInt().coerceAtLeast(1)
 
@@ -479,14 +713,15 @@ private fun createBadgeBitmap(context: Context, color: Int, label: String, flagg
     val canvas = Canvas(bitmap)
 
     val rect = RectF(margin, margin, margin + shapeW, margin + height)
-    val corner = if (elongated) height / 2f else 6f * density
+    val corner = if (elongated) height / 2f else (if (small) 4.5f else 6f) * density
+    val outline = (if (small) 1.2f else 1.5f) * density
 
     paint.style = Paint.Style.FILL
     paint.color = color
     canvas.drawRoundRect(rect, corner, corner, paint)
     paint.style = Paint.Style.STROKE
     paint.color = Color.WHITE
-    paint.strokeWidth = 1.5f * density
+    paint.strokeWidth = outline
     canvas.drawRoundRect(rect, corner, corner, paint)
 
     paint.style = Paint.Style.FILL
@@ -497,21 +732,56 @@ private fun createBadgeBitmap(context: Context, color: Int, label: String, flagg
     canvas.drawText(text, cx, cy - (fm.ascent + fm.descent) / 2f, paint)
 
     if (flagged) {
-        val br = 7f * density
-        val bx = bmpW - br
-        val by = br
-        paint.color = Color.rgb(220, 40, 40)
+        // A red ring around the whole badge, just outside its white outline.
+        val ringWidth = 2.5f * density
+        val out = outline / 2f + ringWidth / 2f
+        val ring = RectF(rect.left - out, rect.top - out, rect.right + out, rect.bottom + out)
+        paint.style = Paint.Style.STROKE
+        paint.color = REPORT_RED
+        paint.strokeWidth = ringWidth
+        canvas.drawRoundRect(ring, corner + out, corner + out, paint)
+
+        // The "!" on the top right corner, pushed outwards so it hides little of the label.
+        val br = 9f * density
+        val bx = rect.right + 3f * density
+        val by = rect.top - 3f * density
+        paint.style = Paint.Style.FILL
         canvas.drawCircle(bx, by, br, paint)
         paint.style = Paint.Style.STROKE
         paint.color = Color.WHITE
         paint.strokeWidth = 1.5f * density
         canvas.drawCircle(bx, by, br, paint)
         paint.style = Paint.Style.FILL
-        paint.color = Color.WHITE
-        paint.textSize = 10f * density
+        paint.textSize = 13f * density
         val fm2 = paint.fontMetrics
         canvas.drawText("!", bx, by - (fm2.ascent + fm2.descent) / 2f, paint)
     }
 
     return bitmap
 }
+
+/**
+ * The badge of a vehicle on a map that is zoomed far out: a dot in the line's
+ * colour without a label, smaller for bus and tram. The bitmap is larger than the
+ * dot, so the dot can still be tapped.
+ */
+private fun createDotBitmap(density: Float, color: Int, elongated: Boolean): Bitmap {
+    val side = (DOT_TAP_DP * density).toInt().coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = (if (elongated) 3.5f else 5f) * density
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.style = Paint.Style.FILL
+    paint.color = color
+    canvas.drawCircle(side / 2f, side / 2f, radius, paint)
+    paint.style = Paint.Style.STROKE
+    paint.color = Color.WHITE
+    paint.strokeWidth = 1.2f * density
+    canvas.drawCircle(side / 2f, side / 2f, radius, paint)
+    return bitmap
+}
+
+private val REPORT_RED = ReportRed.toArgb()
+// Room for the red ring and for the "!" that sticks out of the top right corner.
+private const val REPORT_MARGIN_DP = 13.5f
+private const val DOT_TAP_DP = 20f

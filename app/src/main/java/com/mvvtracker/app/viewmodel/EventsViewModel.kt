@@ -6,11 +6,13 @@ import com.mvvtracker.app.data.model.EventSource
 import com.mvvtracker.app.data.model.EventStatus
 import com.mvvtracker.app.data.model.SBahnEvent
 import com.mvvtracker.app.data.repository.EventRepository
+import com.mvvtracker.app.data.repository.TripReports
 import com.mvvtracker.app.data.repository.UserReportBackend
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,8 +26,13 @@ class EventsViewModel @Inject constructor(
     val activeEvents: StateFlow<List<SBahnEvent>> = repository.observeActiveEvents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Live report state per train, from all devices (Firestore): count, time and station. */
+    val reportedTrips: StateFlow<Map<String, TripReports>> = reportBackend.observeReportedTrips()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     /** Live count of active reports per trainId, from all devices (Firestore). */
-    val remoteReportCounts: StateFlow<Map<String, Int>> = reportBackend.observeActiveReportCounts()
+    val remoteReportCounts: StateFlow<Map<String, Int>> = reportedTrips
+        .map { trips -> trips.mapValues { it.value.flagged } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**

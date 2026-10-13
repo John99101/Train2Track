@@ -45,6 +45,8 @@ public struct TripReports: Equatable, Sendable {
     public let dismissed: Int
     public let throttled: Int
     public let latestMs: Int64
+    /// When the newest counting "on board" report was made (`station` is where); nil when there is none.
+    public let reportedAtMs: Int64?
 }
 
 /// The rules that turn the raw reports of a train into its "!" state. Exact port of
@@ -109,7 +111,14 @@ public enum ReportAggregation {
             verified: valid.contains { $0.verified },
             dismissed: live.filter(\.dismissed).count,
             throttled: live.filter { $0.throttled && !$0.dismissed }.count,
-            latestMs: live.map { $0.createdAtMs ?? 0 }.max() ?? 0
+            latestMs: live.map { $0.createdAtMs ?? 0 }.max() ?? 0,
+            // The newest "on board" report. One sent a moment ago has no server time yet: it counts as made now.
+            reportedAtMs: latestEntry
         )
+    }
+
+    /// Whole minutes since `thenMs`, never negative (the clocks of two phones differ a little).
+    public static func minutesSince(_ thenMs: Int64, nowMs: Int64) -> Int {
+        Int(max(0, nowMs - thenMs) / 60_000)
     }
 }

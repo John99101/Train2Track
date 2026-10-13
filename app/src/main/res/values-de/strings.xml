@@ -34,6 +34,10 @@
     <string name="map_trains_delayed">%1$d Bahnen · Livedaten verzögert</string>
     <string name="map_loading">Bahnen werden geladen…</string>
     <string name="map_attribution">© Mitwirkende von OpenStreetMap</string>
+    <plurals name="map_reports_in_view">
+        <item quantity="one">%1$d Meldung im Kartenausschnitt</item>
+        <item quantity="other">%1$d Meldungen im Kartenausschnitt</item>
+    </plurals>
 
     <!-- Werbung -->
     <string name="ad_label">Anzeige</string>
@@ -49,6 +53,9 @@
     <string name="report_line">Linie</string>
     <string name="report_no_train">Öffne eine Bahn auf der Karte oder im Feed, um sie zu melden.</string>
     <string name="report_submit">Meldung senden</string>
+    <string name="report_made_now">Gerade eben gemeldet</string>
+    <string name="report_made_minutes">Vor %1$d Min. gemeldet</string>
+    <string name="report_made_station">Station: %1$s</string>
     <string name="report_legal_note">Diese App ist nur ein Informationsdienst. Sie hilft nicht dabei, Fahrpreise oder Kontrollen zu umgehen. Führe immer einen gültigen Fahrschein mit.</string>
     <string name="buy_ticket">Gültigen Fahrschein kaufen</string>
     <!-- Live-Verspätungs-Badge (Phase 6 / Option 1) -->

@@ -10,7 +10,7 @@ import com.mvvtracker.app.data.live.routeKey
 import com.mvvtracker.app.data.location.LocationCityProvider
 import com.mvvtracker.app.data.model.CITY_OTHER
 import com.mvvtracker.app.data.model.GermanCity
-import com.mvvtracker.app.data.model.cityForBox
+import com.mvvtracker.app.data.model.cityForView
 import com.mvvtracker.app.data.model.reportCityAt
 import com.mvvtracker.app.data.model.reportScopeFor
 import com.mvvtracker.app.data.repository.ReportScope
@@ -196,7 +196,7 @@ class LiveMapViewModel @Inject constructor(
     fun updateBounds(north: Double, south: Double, east: Double, west: Double) {
         val b = Bounds(north = north, south = south, east = east, west = west)
         viewport.value = b
-        val city = cityForBox(north, south, east, west)
+        val city = cityForView(north, south, east, west)
         source.value = when {
             city != null -> Source.City(city)
             b.isReasonable() -> Source.Box(b)

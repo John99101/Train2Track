@@ -66,6 +66,24 @@ fun cityForBox(north: Double, south: Double, east: Double, west: Double): German
         .minByOrNull { (it.latitude - cLat) * (it.latitude - cLat) + (it.longitude - cLon) * (it.longitude - cLon) }
 }
 
+/**
+ * The city the map shows. Normally the one whose region fully contains the visible
+ * box ([cityForBox]). A box too large to fit into any region (the map is zoomed
+ * out) still belongs to the city its centre lies in: zooming out then keeps that
+ * city's vehicles and route lines, and the app does not have to ask the timetable
+ * service itself. null when the map shows an area outside the cities.
+ */
+fun cityForView(north: Double, south: Double, east: Double, west: Double): GermanCity? {
+    cityForBox(north, south, east, west)?.let { return it }
+    val largerThanARegion = north - south > 2 * CITY_HALF_LAT || east - west > 2 * CITY_HALF_LON
+    if (!largerThanARegion) return null
+    val cLat = (north + south) / 2.0
+    val cLon = (east + west) / 2.0
+    return GERMAN_CITIES
+        .filter { cLat in it.south..it.north && cLon in it.west..it.east }
+        .minByOrNull { (it.latitude - cLat) * (it.latitude - cLat) + (it.longitude - cLon) * (it.longitude - cLon) }
+}
+
 // ---- Reports per city -------------------------------------------------------
 //
 // Every report, delay vote and log entry carries the city the train was seen in,

@@ -226,10 +226,6 @@ class UserReportBackend @Inject constructor(
         }
     }
 
-    /** Live, per-train count for the "!" badge (0 = not flagged). */
-    fun observeActiveReportCounts(): Flow<Map<String, Int>> =
-        observeReportedTrips().map { trips -> trips.mapValues { it.value.flagged } }
-
     private fun DocumentSnapshot.toReportDoc(selfUid: String?): ReportDoc? {
         val tripId = getString("tripId") ?: return null
         // Normally the hidden name of the entry. An entry of an older app version

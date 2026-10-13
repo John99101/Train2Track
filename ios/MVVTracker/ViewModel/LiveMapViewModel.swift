@@ -76,7 +76,7 @@ final class LiveMapViewModel: ObservableObject {
         let b = LivePositions.Box(north: north, south: south, east: east, west: west)
         viewport = b
         let next: Source?
-        if let city = cityForBox(north: north, south: south, east: east, west: west) {
+        if let city = cityForView(north: north, south: south, east: east, west: west) {
             next = .city(city)
         } else if b.isReasonable {
             next = .box(b)

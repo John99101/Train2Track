@@ -70,6 +70,27 @@ public func cityForBox(north: Double, south: Double, east: Double, west: Double)
     return best
 }
 
+/// The city the map shows. Normally the one whose region fully contains the visible
+/// box (`cityForBox`). A box too large to fit into any region (the map is zoomed
+/// out) still belongs to the city its centre lies in: zooming out then keeps that
+/// city's vehicles and route lines, and the app does not have to ask the timetable
+/// service itself. nil when the map shows an area outside the cities.
+/// Port of `cityForView`.
+public func cityForView(north: Double, south: Double, east: Double, west: Double) -> GermanCity? {
+    if let city = cityForBox(north: north, south: south, east: east, west: west) { return city }
+    let largerThanARegion = north - south > 2 * cityHalfLat || east - west > 2 * cityHalfLon
+    if !largerThanARegion { return nil }
+    let cLat = (north + south) / 2.0
+    let cLon = (east + west) / 2.0
+    var best: GermanCity?
+    var bestD = Double.infinity
+    for c in germanCities where cLat >= c.south && cLat <= c.north && cLon >= c.west && cLon <= c.east {
+        let d = (c.latitude - cLat) * (c.latitude - cLat) + (c.longitude - cLon) * (c.longitude - cLon)
+        if d < bestD { best = c; bestD = d }   // strict <: keeps the first of equals, like minByOrNull
+    }
+    return best
+}
+
 /// The default city used when no location is available (München).
 public let defaultCity: GermanCity = germanCities[0]
 

@@ -34,6 +34,10 @@
     <string name="map_trains_delayed">%1$d trains · live data delayed</string>
     <string name="map_loading">Loading live trains…</string>
     <string name="map_attribution">© OpenStreetMap contributors</string>
+    <plurals name="map_reports_in_view">
+        <item quantity="one">%1$d report in view</item>
+        <item quantity="other">%1$d reports in view</item>
+    </plurals>
 
     <!-- Ads -->
     <string name="ad_label">Ad</string>
@@ -49,6 +53,9 @@
     <string name="report_line">Line</string>
     <string name="report_no_train">Open a train on the Map or Feed to report it.</string>
     <string name="report_submit">Submit report</string>
+    <string name="report_made_now">Reported just now</string>
+    <string name="report_made_minutes">Reported %1$d min ago</string>
+    <string name="report_made_station">at %1$s</string>
     <string name="report_legal_note">This app is an information service only. It does not help avoid fares or inspections. Always carry a valid ticket for your journey.</string>
     <string name="buy_ticket">Buy a valid ticket</string>
     <!-- Live delay badge (Phase 6 / Option 1) -->

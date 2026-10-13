@@ -1,6 +1,7 @@
 package com.mvvtracker.app.data.repository
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,5 +71,41 @@ class ReportAggregationTest {
     @Test
     fun verifiedComesThrough() {
         assertTrue(ReportAggregation.aggregate(listOf(entry("a", now - 5000, "verified")), now)[trip]!!.verified)
+    }
+
+    @Test
+    fun timeAndStationOfTheNewestOnBoardReport() {
+        val result = ReportAggregation.aggregate(
+            listOf(
+                entry("a", now - 600_000),
+                entry("b", now - 120_000).copy(station = "Stachus"),
+                // Newer, but none of these counts: over the limit, hidden, a "has left" vote.
+                entry("c", now - 30_000, "throttled").copy(station = "Isartor"),
+                entry("d", now - 20_000, "dismissed").copy(station = "Isartor"),
+                exit("e", now - 10_000)
+            ),
+            now
+        )[trip]!!
+        assertEquals(now - 120_000, result.reportedAtMs)
+        assertEquals("Stachus", result.station)
+    }
+
+    @Test
+    fun noReportTimeWithoutAnOnBoardReport() {
+        assertNull(ReportAggregation.aggregate(listOf(exit("a", now - 1000)), now)[trip]!!.reportedAtMs)
+    }
+
+    @Test
+    fun aReportWithoutServerTimeCountsAsMadeNow() {
+        val result = ReportAggregation.aggregate(listOf(entry("a", now - 5000).copy(createdAtMs = null)), now)[trip]!!
+        assertEquals(now, result.reportedAtMs)
+    }
+
+    @Test
+    fun minutesSinceRoundsDownAndIsNeverNegative() {
+        assertEquals(0, ReportAggregation.minutesSince(now - 59_999, now))
+        assertEquals(1, ReportAggregation.minutesSince(now - 60_000, now))
+        assertEquals(89, ReportAggregation.minutesSince(now - 89 * 60_000L - 5, now))
+        assertEquals(0, ReportAggregation.minutesSince(now + 30_000, now))
     }
 }

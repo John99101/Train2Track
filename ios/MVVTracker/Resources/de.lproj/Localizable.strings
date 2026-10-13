@@ -38,6 +38,9 @@
 "movement_entered" = "An Bord";
 "movement_exited" = "Ausgestiegen";
 "report_submit" = "Meldung senden";
+"report_made_now" = "Gerade eben gemeldet";
+"report_made_minutes" = "Vor %d Min. gemeldet";
+"report_made_station" = "Station: %@";
 "report_legal_note" = "Diese App ist nur ein Informationsdienst. Sie hilft nicht dabei, Fahrpreise oder Kontrollen zu umgehen. Führe immer einen gültigen Fahrschein mit.";
 "buy_ticket" = "Gültigen Fahrschein kaufen";
 "delay_on_time" = "Pünktlich";

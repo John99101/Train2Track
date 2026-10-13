@@ -65,4 +65,43 @@ final class ReportAggregationTests: XCTestCase {
     func testVerifiedComesThrough() {
         XCTAssertTrue(ReportAggregation.aggregate([entry("a", now - 5000, "verified")], nowMs: now)[trip]!.verified)
     }
+
+    /// `entry` with another station.
+    private func entry(_ rider: String, _ at: Int64?, station: String, _ flags: String...) -> ReportDoc {
+        ReportDoc(rider: rider, tripId: trip, state: "entered", line: "S1", station: station,
+                  createdAtMs: at, expiresAtMs: now + 60_000,
+                  throttled: flags.contains("throttled"), dismissed: flags.contains("dismissed"))
+    }
+
+    func testTimeAndStationOfTheNewestOnBoardReport() {
+        let result = ReportAggregation.aggregate(
+            [
+                entry("a", now - 600_000),
+                entry("b", now - 120_000, station: "Stachus"),
+                // Newer, but none of these counts: over the limit, hidden, a "has left" vote.
+                entry("c", now - 30_000, station: "Isartor", "throttled"),
+                entry("d", now - 20_000, station: "Isartor", "dismissed"),
+                exit("e", now - 10_000),
+            ],
+            nowMs: now
+        )[trip]!
+        XCTAssertEqual(now - 120_000, result.reportedAtMs)
+        XCTAssertEqual("Stachus", result.station)
+    }
+
+    func testNoReportTimeWithoutAnOnBoardReport() {
+        XCTAssertNil(ReportAggregation.aggregate([exit("a", now - 1000)], nowMs: now)[trip]!.reportedAtMs)
+    }
+
+    func testAReportWithoutServerTimeCountsAsMadeNow() {
+        let result = ReportAggregation.aggregate([entry("a", nil, station: "Marienplatz")], nowMs: now)[trip]!
+        XCTAssertEqual(now, result.reportedAtMs)
+    }
+
+    func testMinutesSinceRoundsDownAndIsNeverNegative() {
+        XCTAssertEqual(0, ReportAggregation.minutesSince(now - 59_999, nowMs: now))
+        XCTAssertEqual(1, ReportAggregation.minutesSince(now - 60_000, nowMs: now))
+        XCTAssertEqual(89, ReportAggregation.minutesSince(now - 89 * 60_000 - 5, nowMs: now))
+        XCTAssertEqual(0, ReportAggregation.minutesSince(now + 30_000, nowMs: now))
+    }
 }

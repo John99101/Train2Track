@@ -101,6 +101,33 @@ final class CityRegionTests: XCTestCase {
         XCTAssertNil(cityForBox(north: 47.6, south: 47.5, east: 10.1, west: 10.0))
     }
 
+    /// Port of Android's `a zoomed out map stays with the city its centre lies in`.
+    func testZoomedOutMapStaysWithTheCityItsCentreLiesIn() {
+        let m = germanCities.first { $0.id == "muenchen" }!
+        // A view inside the region: that city, as before.
+        XCTAssertEqual("muenchen", cityForView(north: m.latitude + 0.2, south: m.latitude - 0.2,
+                                               east: m.longitude + 0.2, west: m.longitude - 0.2)?.id)
+        // Zoomed out: taller than the region, centred a little off the centre.
+        XCTAssertEqual("muenchen", cityForView(north: m.latitude + 0.6, south: m.latitude - 0.4,
+                                               east: m.longitude + 0.4, west: m.longitude - 0.4)?.id)
+        // Zoomed out over the Ruhr area, where regions overlap: the nearest centre.
+        let d = germanCities.first { $0.id == "dortmund" }!
+        XCTAssertEqual("dortmund", cityForView(north: d.latitude + 1.0, south: d.latitude - 1.0,
+                                               east: d.longitude + 1.0, west: d.longitude - 1.0)?.id)
+    }
+
+    /// Port of Android's `a view outside the cities belongs to no city`.
+    func testViewOutsideTheCitiesBelongsToNoCity() {
+        // Zoomed out around Leipzig.
+        XCTAssertNil(cityForView(north: 51.9, south: 50.7, east: 13.0, west: 11.7))
+        // A view of normal size that sticks out of the region is a free map area, as before.
+        let m = germanCities.first { $0.id == "muenchen" }!
+        XCTAssertNil(cityForView(north: m.north + 0.1, south: m.north - 0.3,
+                                 east: m.longitude + 0.2, west: m.longitude - 0.2))
+        XCTAssertNil(cityForBox(north: m.latitude + 0.6, south: m.latitude - 0.4,
+                                east: m.longitude + 0.4, west: m.longitude - 0.4))
+    }
+
     func testRouteKeyKeepsModesApart() {
         XCTAssertNotEqual(routeKey(mode: "BUS", label: "100"), routeKey(mode: "TRAM", label: "100"))
         XCTAssertEqual("METRO|S1", routeKey(mode: "METRO", label: "S1"))

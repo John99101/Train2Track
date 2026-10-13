@@ -71,6 +71,7 @@ import com.mvvtracker.app.R
 import com.mvvtracker.app.data.model.GERMAN_CITIES
 import com.mvvtracker.app.ui.components.ModeSymbol
 import com.mvvtracker.app.ui.components.NativeAdSlot
+import com.mvvtracker.app.ui.components.ReportMark
 import com.mvvtracker.app.ui.components.SuggestCityFromLocation
 import com.mvvtracker.app.viewmodel.CitySelectionViewModel
 import com.mvvtracker.app.viewmodel.EventsViewModel
@@ -609,12 +610,7 @@ private fun TrainRow(
             }
             if (flagged) {
                 Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier.size(24.dp).clip(CircleShape).background(Color(0xFFDC2828)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("!", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                }
+                ReportMark()
                 // Quick "buy a valid ticket" shortcut on reported trains: opens the
                 // selected city's operator ticket page.
                 IconButton(onClick = onBuyTicket) {

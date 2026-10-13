@@ -34,7 +34,9 @@ data class TripReports(
     val verified: Boolean,
     val dismissed: Int,
     val throttled: Int,
-    val latestMs: Long
+    val latestMs: Long,
+    /** When the newest counting "on board" report was made ([station] is where); null when there is none. */
+    val reportedAtMs: Long? = null
 )
 
 /**
@@ -74,6 +76,8 @@ object ReportAggregation {
             else -> entries.size
         }
         val newest = (entries.ifEmpty { live }).maxByOrNull { it.createdAtMs ?: 0L }
+        // The newest "on board" report. One sent a moment ago has no server time yet: it counts as made now.
+        val reportedAt = entries.maxOfOrNull { it.createdAtMs ?: nowMs }
         return TripReports(
             tripId = tripId,
             line = newest?.line?.takeIf { it.isNotBlank() },
@@ -84,7 +88,12 @@ object ReportAggregation {
             verified = valid.any { it.verified },
             dismissed = live.count { it.dismissed },
             throttled = live.count { it.throttled && !it.dismissed },
-            latestMs = live.maxOfOrNull { it.createdAtMs ?: 0L } ?: 0L
+            latestMs = live.maxOfOrNull { it.createdAtMs ?: 0L } ?: 0L,
+            reportedAtMs = reportedAt
         )
     }
+
+    /** Whole minutes since [thenMs], never negative (the clocks of two phones differ a little). */
+    fun minutesSince(thenMs: Long, nowMs: Long): Int =
+        ((nowMs - thenMs).coerceAtLeast(0L) / 60_000L).toInt()
 }

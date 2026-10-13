@@ -27,7 +27,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 10
-        versionName = "0.5.1"
+        versionName = "0.5.0"
 
         // Live map data source: transitous (open MOTIS instance, no API key).
         // /api/v1/map/trips returns active trip segments (S-Bahn/U-Bahn/regional/

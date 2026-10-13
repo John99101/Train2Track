@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,15 +40,21 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mvvtracker.app.R
 import com.mvvtracker.app.data.model.MovementType
+import com.mvvtracker.app.data.repository.ReportAggregation
 import com.mvvtracker.app.ui.components.ModeSymbol
+import com.mvvtracker.app.ui.components.ReportMark
+import com.mvvtracker.app.ui.components.ReportRed
 import com.mvvtracker.app.util.AppInfo
 import com.mvvtracker.app.viewmodel.CitySelectionViewModel
 import com.mvvtracker.app.viewmodel.DelayVoteState
+import com.mvvtracker.app.viewmodel.EventsViewModel
+import kotlinx.coroutines.delay
 import com.mvvtracker.app.viewmodel.ReportSubmitState
 import com.mvvtracker.app.viewmodel.ReportViewModel
 
@@ -59,6 +67,7 @@ import com.mvvtracker.app.viewmodel.ReportViewModel
 fun ReportEventScreen(
     reportViewModel: ReportViewModel = hiltViewModel(),
     citySelectionViewModel: CitySelectionViewModel = hiltViewModel(),
+    eventsViewModel: EventsViewModel = hiltViewModel(),
     preselectedLine: String? = null,
     tripId: String? = null,
     currentStation: String? = null,
@@ -73,6 +82,21 @@ fun ReportEventScreen(
     val selectedCity by citySelectionViewModel.selectedCity.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     var movement by remember { mutableStateOf(MovementType.ENTERED) }
+
+    // Is there a current report on this journey, and when and where was the newest made?
+    val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
+    val reportedTrips by eventsViewModel.reportedTrips.collectAsStateWithLifecycle()
+    val flagged = tripId != null && tripId in flaggedTripIds
+    val report = reportedTrips[tripId]?.takeIf { it.flagged > 0 }
+    // The age is counted on the phone, so it also moves on while no new data arrives.
+    val nowMs by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(20_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    val reportedMinutes = report?.reportedAtMs?.let { ReportAggregation.minutesSince(it, nowMs) }
+    val reportedStation = report?.station
 
     Column(
         modifier = Modifier
@@ -123,7 +147,7 @@ fun ReportEventScreen(
                     ModeSymbol(mode, size = 34.dp)
                     Spacer(Modifier.width(14.dp))
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         preselectedLine ?: stringResource(R.string.report_line),
                         style = MaterialTheme.typography.titleLarge,
@@ -134,6 +158,37 @@ fun ReportEventScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                // A current report on this journey: the same "!" as in the Feed and on
+                // the Map, with when and where the newest report was made.
+                if (flagged) {
+                    Spacer(Modifier.width(12.dp))
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.widthIn(max = 170.dp)
+                    ) {
+                        ReportMark(size = 28.dp)
+                        if (reportedMinutes != null) {
+                            Text(
+                                if (reportedMinutes == 0) stringResource(R.string.report_made_now)
+                                else stringResource(R.string.report_made_minutes, reportedMinutes),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ReportRed,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        if (reportedStation != null) {
+                            Text(
+                                stringResource(R.string.report_made_station, reportedStation),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.End,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }

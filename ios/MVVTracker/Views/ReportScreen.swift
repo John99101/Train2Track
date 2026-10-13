@@ -11,6 +11,8 @@ struct ReportScreen: View {
     var ticketURL: String = dbTicketsURL
     /// The city this train's reports are filed under (a city id or "other").
     var reportCity: String = cityOther
+    /// The live reports of the screen this was opened from (Feed or Map).
+    @ObservedObject var reports: ReportCountsViewModel
 
     @EnvironmentObject private var loc: LocalizationManager
     @StateObject private var vm = ReportViewModel()
@@ -23,6 +25,19 @@ struct ReportScreen: View {
 
     /// Current station (Android passes `fromStop ?: toStop`), empty when unknown.
     private var station: String { train.fromStop ?? train.toStop ?? "" }
+
+    /// The red of a reported journey, as in the Feed.
+    private static let reportRed = Color(red: 0.86, green: 0.16, blue: 0.16)
+
+    /// Is there a current report on this journey (the same rule as the "!" in the Feed)?
+    private var flagged: Bool { train.tripId.map(reports.flaggedTripIds.contains) ?? false }
+
+    /// The report state with time and station; nil while only this phone knows of
+    /// the report (it was sent a moment ago).
+    private var report: TripReports? {
+        guard let id = train.tripId, let r = reports.trips[id], r.flagged > 0 else { return nil }
+        return r
+    }
 
     var body: some View {
         NavigationStack {
@@ -38,6 +53,40 @@ struct ReportScreen: View {
                             .background(train.displayColor, in: Capsule())
                         Spacer()
                         Text(station).foregroundStyle(.secondary)
+                        // A current report on this journey: the same "!" as in the
+                        // Feed and on the Map.
+                        if flagged {
+                            Text("!")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Self.reportRed, in: Circle())
+                        }
+                    }
+                    // ... with when and where the newest report was made, on the right.
+                    if flagged, let report = report {
+                        // The age is counted on the phone, so it also moves on while
+                        // no new data arrives.
+                        TimelineView(.periodic(from: .now, by: 20)) { context in
+                            VStack(alignment: .trailing, spacing: 2) {
+                                if let at = report.reportedAtMs {
+                                    let minutes = ReportAggregation.minutesSince(
+                                        at, nowMs: Int64(context.date.timeIntervalSince1970 * 1000))
+                                    Text(minutes == 0 ? loc.t("report_made_now")
+                                                      : loc.t("report_made_minutes", minutes))
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(Self.reportRed)
+                                }
+                                if let where_ = report.station {
+                                    Text(loc.t("report_made_station", where_))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.trailing)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
                     }
                     if let to = train.toStop {
                         LabeledContent(loc.t("report_direction")) { Text(to) }

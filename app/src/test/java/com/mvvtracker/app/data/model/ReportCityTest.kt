@@ -98,4 +98,26 @@ class ReportCityTest {
         assertTrue(grown.contains(big))
         assertFalse(big.contains(grown))
     }
+
+    @Test
+    fun `a zoomed out map stays with the city its centre lies in`() {
+        val m = city("muenchen")
+        // A view inside the region: that city, as before.
+        assertEquals("muenchen", cityForView(m.latitude + 0.2, m.latitude - 0.2, m.longitude + 0.2, m.longitude - 0.2)?.id)
+        // Zoomed out: taller than the region, centred a little off the centre.
+        assertEquals("muenchen", cityForView(m.latitude + 0.6, m.latitude - 0.4, m.longitude + 0.4, m.longitude - 0.4)?.id)
+        // Zoomed out over the Ruhr area, where regions overlap: the nearest centre.
+        val d = city("dortmund")
+        assertEquals("dortmund", cityForView(d.latitude + 1.0, d.latitude - 1.0, d.longitude + 1.0, d.longitude - 1.0)?.id)
+    }
+
+    @Test
+    fun `a view outside the cities belongs to no city`() {
+        // Zoomed out around Leipzig.
+        assertEquals(null, cityForView(51.9, 50.7, 13.0, 11.7))
+        // A view of normal size that sticks out of the region is a free map area, as before.
+        val m = city("muenchen")
+        assertEquals(null, cityForView(m.north + 0.1, m.north - 0.3, m.longitude + 0.2, m.longitude - 0.2))
+        assertEquals(null, cityForBox(m.latitude + 0.6, m.latitude - 0.4, m.longitude + 0.4, m.longitude - 0.4))
+    }
 }

@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Train2Track</string>
+
+    <!-- Untere Navigation -->
+    <string name="nav_feed">Feed</string>
+    <string name="nav_map">Karte</string>
+    <string name="nav_report">Melden</string>
+    <string name="nav_admin">Admin</string>
+    <string name="nav_settings">Einstellungen</string>
+    <string name="nav_back">Zurück</string>
+
+    <!-- Feed -->
+    <string name="feed_city">Stadt</string>
+    <string name="feed_trains_live">%1$d Fahrzeuge live in %2$s</string>
+    <string name="feed_trains_delayed">%1$d Fahrzeuge in %2$s · Livedaten verzögert</string>
+    <string name="feed_unavailable">Livedaten nicht verfügbar, erneuter Versuch…</string>
+    <string name="feed_looking">Suche nach Fahrzeugen in %1$s…</string>
+    <string name="label_sbahn">S-Bahn</string>
+    <string name="label_ubahn">U-Bahn</string>
+    <string name="label_bus">Bus</string>
+    <string name="label_tram">Tram</string>
+    <string name="map_other_rail">Bahn</string>
+    <string name="feed_filter_all">Alle</string>
+    <string name="feed_filter_reports">Aktuelle Meldungen</string>
+    <string name="feed_no_reports">Hier ist aktuell keine Bahn gemeldet.</string>
+    <string name="feed_filter">Filter</string>
+    <string name="feed_line">Linie</string>
+    <string name="feed_all_lines">Alle Linien</string>
+    <string name="feed_search_hint">Linie oder Station suchen</string>
+
+    <!-- Karte -->
+    <string name="map_trains_live">%1$d Bahnen live · Karte bewegen zum Erkunden</string>
+    <string name="map_trains_delayed">%1$d Bahnen · Livedaten verzögert</string>
+    <string name="map_loading">Bahnen werden geladen…</string>
+    <string name="map_attribution">© Mitwirkende von OpenStreetMap</string>
+
+    <!-- Werbung -->
+    <string name="ad_label">Anzeige</string>
+    <string name="ad_skip">Anzeige überspringen</string>
+
+    <!-- Melden -->
+    <string name="report_title">Melden</string>
+    <string name="report_subtitle">Teile aktuelle Informationen mit anderen Fahrgästen.</string>
+    <string name="report_inspection_title">Fahrscheinkontrolle</string>
+    <string name="report_control_hint">Du meldest, dass auf diesem Zug gerade eine Fahrscheinkontrolle stattfindet. Diese Information hilft Fahrgästen, einen gültigen Fahrschein bereitzuhalten. Sie darf niemals dazu verwendet werden, ohne Fahrschein zu fahren.</string>
+    <string name="movement_entered">An Bord</string>
+    <string name="movement_exited">Ausgestiegen</string>
+    <string name="report_line">Linie</string>
+    <string name="report_no_train">Öffne eine Bahn auf der Karte oder im Feed, um sie zu melden.</string>
+    <string name="report_submit">Meldung senden</string>
+    <string name="report_legal_note">Diese App ist nur ein Informationsdienst. Sie hilft nicht dabei, Fahrpreise oder Kontrollen zu umgehen. Führe immer einen gültigen Fahrschein mit.</string>
+    <string name="buy_ticket">Gültigen Fahrschein kaufen</string>
+    <!-- Live-Verspätungs-Badge (Phase 6 / Option 1) -->
+    <string name="delay_on_time">Pünktlich</string>
+    <string name="delay_late">+%1$d Min</string>
+    <string name="delay_early">%1$d Min früher</string>
+    <string name="delay_scheduled">Nach Fahrplan</string>
+    <!-- Verspätung bestätigen/verneinen auf dem Melde-Bildschirm (Phase 6 / Option 2) -->
+    <string name="delay_vote_title">Hat dieser Zug Verspätung?</string>
+    <string name="delay_vote_sub">Hilf anderen Fahrgästen. Bestätige die Verspätung oder melde, dass der Zug pünktlich ist.</string>
+    <string name="delay_vote_yes">Verspätet</string>
+    <string name="delay_vote_no">Pünktlich</string>
+    <string name="delay_vote_thanks_late">Danke! Du hast diesen Zug als verspätet gemeldet.</string>
+    <string name="delay_vote_thanks_on_time">Danke! Du hast diesen Zug als pünktlich gemeldet.</string>
+    <string name="delay_confirmed_count">%1$d bestätigen Verspätung</string>
+    <!-- Störungs-Banner (Phase 6 / Option 2b) -->
+    <string name="disruptions_banner">%1$d aktuelle Störung(en)</string>
+    <string name="disruptions_show">Anzeigen</string>
+    <string name="disruptions_hide">Ausblenden</string>
+    <string name="report_submitting">Wird gesendet…</string>
+    <string name="report_error_send">Das hat nicht geklappt. Bitte prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="report_success_entered">Danke! Andere Fahrgäste sehen jetzt eine Kontrolle in diesem Zug.</string>
+    <string name="report_success_exited">Danke! Gespeichert, dass die Kontrolle diesen Zug verlassen hat.</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_skip">Überspringen</string>
+    <string name="onboarding_next">Weiter</string>
+    <string name="onboarding_start">Los geht\'s</string>
+    <string name="ob1_title">Bahnen live auf der Karte</string>
+    <string name="ob1_body">Sieh S-Bahn, U-Bahn und mehr in Echtzeit durch deine Stadt fahren.</string>
+    <string name="ob2_title">Tippe eine Bahn zum Melden</string>
+    <string name="ob2_body">Öffne ein Fahrzeug und wähle: „An Bord“ meldet eine Fahrscheinkontrolle auf dieser Fahrt, „Ausgestiegen“ beendet deine Meldung.</string>
+    <string name="ob3_title">Nach Stadt stöbern</string>
+    <string name="ob3_body">Wähle im Feed eine Stadt und sieh alle S-Bahnen, U-Bahnen, Trams und Busse live als Liste.</string>
+
+    <!-- Einwilligung -->
+    <string name="consent_title">Bevor du startest</string>
+    <string name="consent_intro">Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Optionen unten sind aus, bis du sie einschaltest. Zur Werbung fragt dich Google in einem eigenen Dialog. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.</string>
+    <string name="consent_analytics_title">Nutzungsstatistik</string>
+    <string name="consent_analytics_desc">Erlaubt Google Analytics zu zählen, wie die App genutzt wird, damit wir sie verbessern können. Aus, solange du es nicht einschaltest.</string>
+    <string name="consent_location_title">Standort</string>
+    <string name="consent_location_desc">Wählt deine Stadt vor und zeigt deine Position auf der Karte. Dein Standort bleibt auf deinem Gerät.</string>
+    <string name="consent_continue">Weiter</string>
+
+    <!-- Einstellungen -->
+    <string name="settings_title">Datenschutz &amp; Daten</string>
+    <string name="settings_intro">Verwalte, was Train2Track mit deinen Daten tun darf, im Einklang mit der Datenschutzgrundverordnung der EU (DSGVO).</string>
+    <string name="settings_analytics">Nutzungsstatistik</string>
+    <string name="settings_location">Standort</string>
+    <string name="settings_ad_privacy">Datenschutz bei Werbung</string>
+    <string name="settings_language">Sprache</string>
+    <string name="lang_system">Systemstandard</string>
+    <string name="settings_theme">Darstellung</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="settings_view_policy">Datenschutzerklärung ansehen</string>
+    <string name="settings_view_legal">Impressum ansehen</string>
+    <string name="settings_about">Datenquellen und Open Source</string>
+    <string name="settings_report_content">Inhalt melden</string>
+    <string name="settings_random_id">Deine zufällige Kennung</string>
+    <string name="settings_random_id_desc">Nenne diese Kennung, wenn du uns wegen deiner Daten schreibst. Sie sagt nicht, wer du bist.</string>
+    <string name="settings_random_id_copy">Kennung kopieren</string>
+    <string name="settings_random_id_copied">Kopiert.</string>
+    <string name="settings_delete">Meine Daten löschen</string>
+    <string name="settings_delete_desc">Dies widerruft alle Einwilligungen, trennt künftige Aktivität von deinen bisherigen Meldungen und löscht alles auf unseren Servern, was mit deiner Gerätekennung verknüpft ist.</string>
+
+    <!-- Data sources and open source -->
+    <string name="about_title">Datenquellen und Open Source</string>
+    <string name="about_intro">Train2Track nutzt offene Daten. Die Anbieter sind für die App nicht verantwortlich.</string>
+    <string name="about_transit_title">Fahrplan und Live Daten</string>
+    <string name="about_transit_body">Transitous, ein offener Routingdienst, den Freiwillige betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.</string>
+    <string name="about_disruptions_title">Störungsmeldungen</string>
+    <string name="about_disruptions_body">gtfs.de, unter der Lizenz CC BY SA 4.0.</string>
+    <string name="about_map_title">Karte</string>
+    <string name="about_map_body">© Mitwirkende von OpenStreetMap. Die Kartendaten stehen unter der Open Database License.</string>
+    <string name="about_converted">Die Daten werden gekürzt und für die Anzeige umgewandelt. Umgewandelte Daten aus Quellen mit der Lizenz CC BY SA bleiben unter dieser Lizenz.</string>
+    <string name="about_open_source_title">Open Source</string>
+    <string name="about_open_source_body">Der Quellcode der Apps und des Servers ist öffentlich und steht unter der Lizenz GNU AGPL 3.0. Der Name Train2Track und das Logo gehören nicht zu dieser Lizenz.</string>
+    <string name="about_github">Quellcode auf GitHub</string>
+
+    <!-- Admin -->
+    <string name="admin_restricted_title">Eingeschränkt</string>
+    <string name="admin_restricted_body">Diese Konsole ist nur für Admins verfügbar.</string>
+    <string name="admin_title">Adminkonsole</string>
+    <string name="admin_sub">Gemeldete Bahnen prüfen: bestätigen oder falsche Meldungen verwerfen.</string>
+    <string name="admin_dismiss">Verwerfen</string>
+
+
+    <!-- Admin console: moderation, live users, inspection statistics -->
+    <string name="admin_verify">Bestätigen</string>
+    <string name="admin_restore">Wiederherstellen</string>
+    <string name="admin_reported_trains">Gemeldete Bahnen</string>
+    <string name="admin_no_reports">Aktuell ist keine Bahn gemeldet.</string>
+    <string name="admin_report_counts">%1$d an Bord · %2$d ausgestiegen</string>
+    <string name="admin_state_verified">Bestätigt</string>
+    <string name="admin_state_dismissed">Verworfen</string>
+    <string name="admin_state_throttled">%1$d durch das Spamlimit blockiert</string>
+    <string name="admin_action_failed">Aktion fehlgeschlagen: %1$s</string>
+    <string name="admin_active_users">%1$d aktive Nutzer</string>
+    <string name="admin_active_users_split">Android %1$d · iOS %2$d · letzte 10 Minuten</string>
+    <string name="admin_active_users_unknown">Aktive Nutzer: noch keine Daten</string>
+    <string name="admin_stats_title">Kontrollstatistik (letzte 30 Tage)</string>
+    <string name="admin_stats_load">Statistik laden</string>
+    <string name="admin_stats_loading">Statistik wird geladen…</string>
+    <string name="admin_stats_total">%1$d Meldungen auf %2$d Bahnen</string>
+    <string name="admin_stats_by_line">Nach Linie</string>
+    <string name="admin_stats_by_weekday">Nach Wochentag</string>
+    <string name="admin_stats_by_hour">Nach Uhrzeit</string>
+    <string name="admin_stats_by_station">Häufigste Stationen</string>
+    <string name="admin_stats_failed">Die Statistik konnte nicht geladen werden.</string>
+    <string name="admin_routes_rebuild">Linienverläufe für alle Städte neu erstellen</string>
+    <string name="admin_routes_rebuilt">Linienverläufe werden neu erstellt.</string>
+    <string name="settings_delete_done">Deine Daten wurden gelöscht.</string>
+    <string name="settings_delete_failed">Das Löschen auf dem Server ist fehlgeschlagen. Bitte versuche es erneut oder schreib uns eine Mail.</string>
+
+</resources>

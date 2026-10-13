@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MvvTracker" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Launch theme: shows the app icon on the Train2Track red background while the
+         process starts, then hands off to the Compose UI theme. -->
+    <style name="Theme.MvvTracker.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/dtracking_red</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.MvvTracker</item>
+    </style>
+</resources>

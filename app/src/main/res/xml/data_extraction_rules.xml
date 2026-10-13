@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps the consent choices out of the cloud backup and out of a device to
+     device transfer, so a restore never silently re-applies stale consent,
+     consistent with GDPR "consent must be current" expectations:
+      - the app's own switches (DataStore file files/datastore/consent_prefs);
+      - the advertising choice from Google's consent dialog, which Google's
+        software keeps in the app's default preferences and in a file of its own.
+     (The cloud backup is switched off altogether in the manifest; the entries
+     here matter for the device to device transfer.) -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/consent_prefs.preferences_pb" />
+        <exclude domain="sharedpref" path="com.mvvtracker.app_preferences.xml" />
+        <exclude domain="sharedpref" path="__GOOGLE_FUNDING_CHOICE_SDK_INTERNAL__.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/consent_prefs.preferences_pb" />
+        <exclude domain="sharedpref" path="com.mvvtracker.app_preferences.xml" />
+        <exclude domain="sharedpref" path="__GOOGLE_FUNDING_CHOICE_SDK_INTERNAL__.xml" />
+    </device-transfer>
+</data-extraction-rules>

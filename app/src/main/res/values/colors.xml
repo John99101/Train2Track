@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mvv_blue">#00629B</color>
+    <!-- Splash background: deep red pulled from the Train2Track logo gradient. -->
+    <color name="dtracking_red">#C70000</color>
+    <color name="white">#FFFFFF</color>
+</resources>

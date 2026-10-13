@@ -1,0 +1,21 @@
+Datenschutzerklärung
+Stand: Platzhalter
+
+Dieser Text ist ein Platzhalter. Der öffentliche Quellcode enthält die Datenschutzerklärung des Dienstes Train2Track nicht.
+
+1. Wenn Sie diese App veröffentlichen
+Wer eine Fassung dieser App veröffentlicht oder betreibt, ist für die personenbezogenen Daten verantwortlich, die sie verarbeitet. Setzen Sie hier Ihre eigene Datenschutzerklärung ein. Sie muss genau beschreiben, was Ihre Fassung tut.
+
+2. Was dieser Code verarbeitet
+Als Ausgangspunkt: Das tut der Code in diesem Repository.
+• jede Installation meldet sich anonym an und erhält eine zufällige Kennung
+• Meldungen und Verspätungsstimmen werden auf dem Server unter einem Namen gespeichert, der aus der Kennung und der Fahrt berechnet wird, zusammen mit einem Vermerk, zu welcher Kennung sie gehören, den keine App lesen kann
+• solange die App geöffnet ist, sendet sie ein Signal mit der Kennung, der Uhrzeit und der Plattform, damit aktive Installationen gezählt werden können
+• der Server zählt die Meldungen und Stimmen jeder Kennung für kurze Zeit, um Missbrauch zu begrenzen
+• der Standort wird nur auf dem Gerät verwendet und nie an den Server gesendet
+• die Nutzungsstatistik (Android) ist aus, bis sie eingeschaltet wird
+• Werbung wird erst angefragt, nachdem der Einwilligungsdialog beantwortet wurde
+• Anfragen nach Live Daten und Kartenkacheln erreichen die Anbieter dieser Daten mit der IP Adresse des Geräts
+
+3. Der ursprüngliche Dienst
+Die Datenschutzerklärung von Train2Track steht auf dessen Website.

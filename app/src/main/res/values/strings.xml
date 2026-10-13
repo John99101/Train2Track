@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Train2Track</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_feed">Feed</string>
+    <string name="nav_map">Map</string>
+    <string name="nav_report">Report</string>
+    <string name="nav_admin">Admin</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_back">Back</string>
+
+    <!-- Feed -->
+    <string name="feed_city">City</string>
+    <string name="feed_trains_live">%1$d vehicles live in %2$s</string>
+    <string name="feed_trains_delayed">%1$d vehicles in %2$s · live data delayed</string>
+    <string name="feed_unavailable">Live feed unavailable, retrying…</string>
+    <string name="feed_looking">Looking for live vehicles in %1$s…</string>
+    <string name="label_sbahn">S-Bahn</string>
+    <string name="label_ubahn">U-Bahn</string>
+    <string name="label_bus">Bus</string>
+    <string name="label_tram">Tram</string>
+    <string name="map_other_rail">Rail</string>
+    <string name="feed_filter_all">All</string>
+    <string name="feed_filter_reports">Current reports</string>
+    <string name="feed_no_reports">No trains currently reported here.</string>
+    <string name="feed_filter">Filter</string>
+    <string name="feed_line">Line</string>
+    <string name="feed_all_lines">All lines</string>
+    <string name="feed_search_hint">Search line or station</string>
+
+    <!-- Map -->
+    <string name="map_trains_live">%1$d trains live · move the map to explore</string>
+    <string name="map_trains_delayed">%1$d trains · live data delayed</string>
+    <string name="map_loading">Loading live trains…</string>
+    <string name="map_attribution">© OpenStreetMap contributors</string>
+
+    <!-- Ads -->
+    <string name="ad_label">Ad</string>
+    <string name="ad_skip">Skip ad</string>
+
+    <!-- Report -->
+    <string name="report_title">Report</string>
+    <string name="report_subtitle">Share live information with other riders.</string>
+    <string name="report_inspection_title">Ticket inspection</string>
+    <string name="report_control_hint">You are reporting that a ticket inspection is currently happening on this train. This information helps riders keep a valid ticket ready. It must never be used to travel without paying.</string>
+    <string name="movement_entered">On board</string>
+    <string name="movement_exited">Has left</string>
+    <string name="report_line">Line</string>
+    <string name="report_no_train">Open a train on the Map or Feed to report it.</string>
+    <string name="report_submit">Submit report</string>
+    <string name="report_legal_note">This app is an information service only. It does not help avoid fares or inspections. Always carry a valid ticket for your journey.</string>
+    <string name="buy_ticket">Buy a valid ticket</string>
+    <!-- Live delay badge (Phase 6 / Option 1) -->
+    <string name="delay_on_time">On time</string>
+    <string name="delay_late">+%1$d min</string>
+    <string name="delay_early">%1$d min early</string>
+    <string name="delay_scheduled">Scheduled</string>
+    <!-- Crowd-sourced delay confirm/deny on the Report screen (Phase 6 / Option 2) -->
+    <string name="delay_vote_title">Is this train delayed?</string>
+    <string name="delay_vote_sub">Help other riders. Confirm the delay or report the train is on time.</string>
+    <string name="delay_vote_yes">Late</string>
+    <string name="delay_vote_no">On time</string>
+    <string name="delay_vote_thanks_late">Thanks! You reported this train as late.</string>
+    <string name="delay_vote_thanks_on_time">Thanks! You reported this train as on time.</string>
+    <string name="delay_confirmed_count">%1$d confirm delay</string>
+    <!-- Disruptions banner (Phase 6 / Option 2b) -->
+    <string name="disruptions_banner">%1$d live disruption(s)</string>
+    <string name="disruptions_show">Show</string>
+    <string name="disruptions_hide">Hide</string>
+    <string name="report_submitting">Submitting…</string>
+    <string name="report_error_send">That did not work. Please check your connection and try again.</string>
+    <string name="report_success_entered">Thanks! Other riders now see a ticket inspection on this train.</string>
+    <string name="report_success_exited">Thanks! Your note that the inspection has left this train is saved.</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_start">Get started</string>
+    <string name="ob1_title">Live trains on the map</string>
+    <string name="ob1_body">Watch S-Bahn, U-Bahn and more move in real time across your city.</string>
+    <string name="ob2_title">Tap a train to report</string>
+    <string name="ob2_body">Open a vehicle and choose: “On board” reports a ticket inspection on this journey, “Has left” ends your report.</string>
+    <string name="ob3_title">Browse by city</string>
+    <string name="ob3_body">Pick a city in the Feed to see all its S-Bahn, U-Bahn, tram and bus lines as a live list.</string>
+
+    <!-- Consent -->
+    <string name="consent_title">Before you start</string>
+    <string name="consent_intro">The app only uses what it needs to show live public transport. The options below are off unless you turn them on. Google asks you about advertising in a separate dialog. You can change all of this later in Settings, or delete your data at any time.</string>
+    <string name="consent_analytics_title">Usage statistics</string>
+    <string name="consent_analytics_desc">Lets Google Analytics count how the app is used, so we can improve it. Off unless you switch it on.</string>
+    <string name="consent_location_title">Location</string>
+    <string name="consent_location_desc">Preselects your city and shows your position on the map. Your location stays on your phone.</string>
+    <string name="consent_continue">Continue</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Privacy &amp; data</string>
+    <string name="settings_intro">Manage what Train2Track is allowed to do with your data, in line with the EU General Data Protection Regulation (GDPR).</string>
+    <string name="settings_analytics">Usage statistics</string>
+    <string name="settings_location">Location</string>
+    <string name="settings_ad_privacy">Ad privacy choices</string>
+    <string name="settings_language">Language</string>
+    <string name="lang_system">System default</string>
+    <string name="settings_theme">Appearance</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_view_policy">View privacy policy</string>
+    <string name="settings_view_legal">View legal notice</string>
+    <string name="settings_about">Data sources and open source</string>
+    <string name="settings_report_content">Report content</string>
+    <string name="settings_random_id">Your random ID</string>
+    <string name="settings_random_id_desc">Name this ID when you write to us about your data. It does not say who you are.</string>
+    <string name="settings_random_id_copy">Copy ID</string>
+    <string name="settings_random_id_copied">Copied.</string>
+    <string name="settings_delete">Delete my data</string>
+    <string name="settings_delete_desc">This withdraws all consent, disconnects future activity from your past reports, and erases everything on our servers that is linked to your device identifier.</string>
+
+    <!-- Data sources and open source -->
+    <string name="about_title">Data sources and open source</string>
+    <string name="about_intro">Train2Track uses open data. The providers are not responsible for the app.</string>
+    <string name="about_transit_title">Timetable and live data</string>
+    <string name="about_transit_body">Transitous, an open routing service run by volunteers. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.</string>
+    <string name="about_disruptions_title">Disruption notices</string>
+    <string name="about_disruptions_body">gtfs.de, under the licence CC BY SA 4.0.</string>
+    <string name="about_map_title">Map</string>
+    <string name="about_map_body">© OpenStreetMap contributors. The map data is available under the Open Database License.</string>
+    <string name="about_converted">The data is shortened and converted for display. Converted data from sources under the licence CC BY SA stays under that licence.</string>
+    <string name="about_open_source_title">Open source</string>
+    <string name="about_open_source_body">The source code of the apps and of the server is public under the licence GNU AGPL 3.0. The name Train2Track and the logo are not part of that licence.</string>
+    <string name="about_github">Source code on GitHub</string>
+
+    <!-- Admin -->
+    <string name="admin_restricted_title">Restricted</string>
+    <string name="admin_restricted_body">This console is only available to admins.</string>
+    <string name="admin_title">Admin console</string>
+    <string name="admin_sub">Check reported trains: verify them or dismiss false reports.</string>
+    <string name="admin_dismiss">Dismiss</string>
+
+
+    <!-- Admin console: moderation, live users, inspection statistics -->
+    <string name="admin_verify">Verify</string>
+    <string name="admin_restore">Restore</string>
+    <string name="admin_reported_trains">Reported trains</string>
+    <string name="admin_no_reports">No trains are reported right now.</string>
+    <string name="admin_report_counts">%1$d on board · %2$d left</string>
+    <string name="admin_state_verified">Verified</string>
+    <string name="admin_state_dismissed">Dismissed</string>
+    <string name="admin_state_throttled">%1$d blocked by the spam limit</string>
+    <string name="admin_action_failed">Action failed: %1$s</string>
+    <string name="admin_active_users">%1$d active users</string>
+    <string name="admin_active_users_split">Android %1$d · iOS %2$d · last 10 minutes</string>
+    <string name="admin_active_users_unknown">Active users: no data yet</string>
+    <string name="admin_stats_title">Inspection statistics (last 30 days)</string>
+    <string name="admin_stats_load">Load statistics</string>
+    <string name="admin_stats_loading">Loading statistics…</string>
+    <string name="admin_stats_total">%1$d reports on %2$d trains</string>
+    <string name="admin_stats_by_line">By line</string>
+    <string name="admin_stats_by_weekday">By weekday</string>
+    <string name="admin_stats_by_hour">By time of day</string>
+    <string name="admin_stats_by_station">Top stations</string>
+    <string name="admin_stats_failed">Statistics could not be loaded.</string>
+    <string name="admin_routes_rebuild">Rebuild line routes for all cities</string>
+    <string name="admin_routes_rebuilt">Line routes are being rebuilt.</string>
+    <string name="settings_delete_done">Your data has been deleted.</string>
+    <string name="settings_delete_failed">Deleting on the server failed. Please try again or contact us by mail.</string>
+
+</resources>

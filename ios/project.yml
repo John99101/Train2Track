@@ -1,0 +1,73 @@
+name: Train2Track
+options:
+  bundleIdPrefix: com.mvvtracker
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: "2.42.0"
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "12.0.0"
+  GoogleMobileAds:
+    url: https://github.com/googleads/swift-package-manager-google-mobile-ads
+    from: "13.0.0"
+  # Google's consent dialog for advertising (User Messaging Platform).
+  GoogleUserMessagingPlatform:
+    url: https://github.com/googleads/swift-package-manager-google-user-messaging-platform
+    from: "3.0.0"
+  MVVTrackerCore:
+    path: MVVTrackerCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: XXXXXXXXXX
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Train2Track:
+    type: application
+    platform: iOS
+    sources:
+      - path: MVVTracker
+        excludes:
+          - "GoogleService-Info.plist"
+      - path: MVVTracker/GoogleService-Info.plist
+        buildPhase: resources
+    entitlements:
+      path: MVVTracker/Resources/MVVTracker.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.mvvtracker.app
+        # App Check uses App Attest in release builds; without this entitlement
+        # App Attest fails and Firebase sees no valid App Check token from iOS.
+        com.apple.developer.devicecheck.appattest-environment: production
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mvvtracker.app
+        PRODUCT_NAME: Train2Track
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "11"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: MVVTracker/Resources/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_EMIT_LOC_STRINGS: YES
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseAppCheck
+      - package: Firebase
+        product: FirebaseFunctions
+      - package: GoogleMobileAds
+        product: GoogleMobileAds
+      - package: GoogleUserMessagingPlatform
+        product: GoogleUserMessagingPlatform
+      - package: MVVTrackerCore
+        product: MVVTrackerCore

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/John99101/Train2Track/blob/main/SECURITY.md
+    about: Never report a security problem in public. Read how to report it privately.
+  - name: Unlawful content in the app
+    url: https://train2track.web.app/report
+    about: Reports about content shown in the app go to the operator, not to GitHub.

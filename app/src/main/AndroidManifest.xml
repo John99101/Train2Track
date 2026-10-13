@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Network access to fetch MVV / DB status feeds + OpenStreetMap tiles
+         and the live train-position feed -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Optional: only requested if the user opts in to "show my position on the map" -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:name=".MvvTrackerApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.MvvTracker"
+        android:usesCleartextTraffic="false"
+        tools:targetApi="35">
+
+        <!-- Map is now OpenStreetMap (osmdroid) - no Google Maps API key needed. -->
+
+        <!-- AdMob application id. Test id in debug, real id in release - both are
+             set via manifestPlaceholders["admobAppId"] in app/build.gradle.kts. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+
+        <!-- The ads software must not start measuring at app start: it only
+             starts once the user answered Google's consent dialog (see
+             privacy/AdsConsent). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT"
+            android:value="true" />
+
+        <!-- Google Analytics for Firebase is OFF until the user switches on "Usage
+             statistics" (see privacy/AnalyticsSwitch): nothing is collected before
+             that, and every consent type starts as denied. -->
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
+        <!-- The usage statistics are never used for advertising: they do not take
+             over the choice from Google's ad consent dialog. -->
+        <meta-data android:name="google_analytics_tcf_data_enabled" android:value="false" />
+
+        <!-- AdMob and Firebase Analytics both declare this property; keep one. -->
+        <property
+            android:name="android.adservices.AD_SERVICES_CONFIG"
+            android:resource="@xml/gma_ad_services_config"
+            tools:replace="android:resource" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MvvTracker.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>

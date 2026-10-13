@@ -1,0 +1,46 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+google-services.json
+
+# Release signing — keep these private, never commit
+keystore.properties
+*.jks
+*.keystore
+
+# --- iOS / Xcode / Swift Package Manager ---
+# Build products & caches (huge — never commit)
+ios/build/
+ios/**/build/
+ios/spm-cache/
+.build/
+DerivedData/
+*.xcarchive
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Firebase iOS config — client config, kept private like google-services.json.
+# Each machine drops its own copy into the app target.
+GoogleService-Info.plist
+
+# Apple push key
+*.p8
+
+# Gradle/Android module build outputs (any level)
+build/
+app/build/
+
+# Firebase CLI local artifacts (deploy cache + debug logs)
+.firebase/
+firebase-debug.log
+*.log

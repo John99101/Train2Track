@@ -1,0 +1,156 @@
+/* Untere Navigation */
+"nav_feed" = "Feed";
+"nav_map" = "Karte";
+"nav_settings" = "Einstellungen";
+
+/* Feed */
+"feed_city" = "Stadt";
+"feed_trains_live" = "%1$d Fahrzeuge live in %2$@";
+"feed_trains_delayed" = "%1$d Fahrzeuge in %2$@ · Livedaten verzögert";
+"feed_unavailable" = "Livedaten nicht verfügbar, erneuter Versuch…";
+"feed_looking" = "Suche nach Fahrzeugen in %1$@…";
+"label_sbahn" = "S-Bahn";
+"label_ubahn" = "U-Bahn";
+"label_bus" = "Bus";
+"label_tram" = "Tram";
+"feed_filter_all" = "Alle";
+"feed_filter_reports" = "Aktuelle Meldungen";
+"feed_no_reports" = "Hier ist aktuell keine Bahn gemeldet.";
+"feed_filter" = "Filter";
+"feed_all_lines" = "Alle Linien";
+"feed_search_hint" = "Linie oder Station suchen";
+
+/* Karte */
+"map_trains_live" = "%1$d Bahnen live · Karte bewegen zum Erkunden";
+"map_trains_delayed" = "%1$d Bahnen · Livedaten verzögert";
+"map_other_rail" = "Bahn";
+
+/* Werbung */
+"ad_label" = "Anzeige";
+"ad_skip" = "Anzeige überspringen";
+
+/* Melden */
+"report_title" = "Melden";
+"report_inspection_title" = "Fahrscheinkontrolle";
+"report_direction" = "Richtung";
+"report_movement" = "Bewegung";
+"report_control_hint" = "Du meldest, dass auf diesem Zug gerade eine Fahrscheinkontrolle stattfindet. Diese Information hilft Fahrgästen, einen gültigen Fahrschein bereitzuhalten. Sie darf niemals dazu verwendet werden, ohne Fahrschein zu fahren.";
+"movement_entered" = "An Bord";
+"movement_exited" = "Ausgestiegen";
+"report_submit" = "Meldung senden";
+"report_legal_note" = "Diese App ist nur ein Informationsdienst. Sie hilft nicht dabei, Fahrpreise oder Kontrollen zu umgehen. Führe immer einen gültigen Fahrschein mit.";
+"buy_ticket" = "Gültigen Fahrschein kaufen";
+"delay_on_time" = "Pünktlich";
+"delay_late" = "+%d Min";
+"delay_early" = "%d Min früher";
+"delay_scheduled" = "Nach Fahrplan";
+"delay_vote_title" = "Hat dieser Zug Verspätung?";
+"delay_vote_sub" = "Hilf anderen Fahrgästen. Bestätige die Verspätung oder melde, dass der Zug pünktlich ist.";
+"delay_vote_yes" = "Verspätet";
+"delay_vote_no" = "Pünktlich";
+"delay_vote_thanks_late" = "Danke! Du hast diesen Zug als verspätet gemeldet.";
+"delay_vote_thanks_on_time" = "Danke! Du hast diesen Zug als pünktlich gemeldet.";
+"delay_confirmed_count" = "%d bestätigen Verspätung";
+"disruptions_banner" = "%d aktuelle Störung(en)";
+"disruptions_show" = "Anzeigen";
+"disruptions_hide" = "Ausblenden";
+"report_submitting" = "Wird gesendet…";
+"report_error_send" = "Das hat nicht geklappt. Bitte prüfe deine Verbindung und versuche es erneut.";
+"report_success_entered" = "Danke! Andere Fahrgäste sehen jetzt eine Kontrolle in diesem Zug.";
+"report_success_exited" = "Danke! Gespeichert, dass die Kontrolle diesen Zug verlassen hat.";
+"report_close" = "Schließen";
+"report_no_train" = "Öffne eine Bahn auf der Karte oder im Feed, um sie zu melden.";
+
+/* Onboarding */
+"onboarding_skip" = "Überspringen";
+"onboarding_next" = "Weiter";
+"onboarding_start" = "Los geht's";
+"ob1_title" = "Bahnen live auf der Karte";
+"ob1_body" = "Sieh S-Bahn, U-Bahn und mehr in Echtzeit durch deine Stadt fahren.";
+"ob2_title" = "Tippe eine Bahn zum Melden";
+"ob2_body" = "Öffne ein Fahrzeug und wähle: „An Bord“ meldet eine Fahrscheinkontrolle auf dieser Fahrt, „Ausgestiegen“ beendet deine Meldung.";
+"ob3_title" = "Nach Stadt stöbern";
+"ob3_body" = "Wähle im Feed eine Stadt und sieh alle S-Bahnen, U-Bahnen, Trams und Busse live als Liste.";
+
+/* Einwilligung */
+"consent_title" = "Bevor du startest";
+"consent_intro" = "Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Option unten ist aus, bis du sie einschaltest. Zur Werbung fragt dich Google in einem eigenen Dialog. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.";
+"consent_location_title" = "Standort";
+"consent_location_desc" = "Wählt deine Stadt vor und zeigt deine Position auf der Karte. Dein Standort bleibt auf deinem Gerät.";
+"consent_continue" = "Weiter";
+
+/* Einstellungen */
+"settings_title" = "Datenschutz & Daten";
+"settings_intro" = "Verwalte, was Train2Track mit deinen Daten tun darf, im Einklang mit der Datenschutzgrundverordnung der EU (DSGVO).";
+"settings_location" = "Standort";
+"settings_ad_privacy" = "Datenschutz bei Werbung";
+"settings_language" = "Sprache";
+"lang_system" = "Systemstandard";
+"settings_theme" = "Darstellung";
+"theme_light" = "Hell";
+"theme_dark" = "Dunkel";
+"settings_view_policy" = "Datenschutzerklärung ansehen";
+"settings_view_legal" = "Impressum ansehen";
+"settings_about" = "Datenquellen und Open Source";
+"settings_report_content" = "Inhalt melden";
+"settings_random_id" = "Deine zufällige Kennung";
+"settings_random_id_desc" = "Nenne diese Kennung, wenn du uns wegen deiner Daten schreibst. Sie sagt nicht, wer du bist.";
+"settings_random_id_copy" = "Kennung kopieren";
+"settings_random_id_copied" = "Kopiert.";
+"settings_delete" = "Meine Daten löschen";
+
+/* Datenquellen und Open Source */
+"about_title" = "Datenquellen und Open Source";
+"about_intro" = "Train2Track nutzt offene Daten. Die Anbieter sind für die App nicht verantwortlich.";
+"about_transit_title" = "Fahrplan und Live Daten";
+"about_transit_body" = "Transitous, ein offener Routingdienst, den Freiwillige betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.";
+"about_disruptions_title" = "Störungsmeldungen";
+"about_disruptions_body" = "gtfs.de, unter der Lizenz CC BY SA 4.0.";
+"about_map_title" = "Karte";
+"about_map_body" = "Apple Karten. Es gelten die Bedingungen und Quellenangaben von Apple.";
+"about_converted" = "Die Daten werden gekürzt und für die Anzeige umgewandelt. Umgewandelte Daten aus Quellen mit der Lizenz CC BY SA bleiben unter dieser Lizenz.";
+"about_open_source_title" = "Open Source";
+"about_open_source_body" = "Der Quellcode der Apps und des Servers ist öffentlich und steht unter der Lizenz GNU AGPL 3.0. Der Name Train2Track und das Logo gehören nicht zu dieser Lizenz.";
+"about_github" = "Quellcode auf GitHub";
+"settings_delete_desc" = "Dies widerruft alle Einwilligungen, trennt künftige Aktivität von deinen bisherigen Meldungen und löscht alles auf unseren Servern, was mit deiner Gerätekennung verknüpft ist.";
+
+/* Datenschutzerklärung */
+"privacy_title" = "Datenschutzerklärung";
+"legal_title" = "Impressum";
+
+/* Account / server (server) */
+"nav_admin" = "Admin";
+"settings_delete_done" = "Deine Daten wurden gelöscht.";
+"settings_delete_failed" = "Das Löschen auf dem Server ist fehlgeschlagen. Bitte versuche es erneut oder schreib uns eine Mail.";
+"map_loading" = "Bahnen werden geladen…";
+"report_subtitle" = "Teile aktuelle Informationen mit anderen Fahrgästen.";
+
+/* Admin console (only with the admin claim) */
+"admin_restricted_title" = "Eingeschränkt";
+"admin_restricted_body" = "Diese Konsole ist nur für Admins verfügbar.";
+"admin_title" = "Adminkonsole";
+"admin_sub" = "Gemeldete Bahnen prüfen: bestätigen oder falsche Meldungen verwerfen.";
+"admin_dismiss" = "Verwerfen";
+"admin_verify" = "Bestätigen";
+"admin_restore" = "Wiederherstellen";
+"admin_reported_trains" = "Gemeldete Bahnen";
+"admin_no_reports" = "Aktuell ist keine Bahn gemeldet.";
+"admin_report_counts" = "%1$d an Bord · %2$d ausgestiegen";
+"admin_state_verified" = "Bestätigt";
+"admin_state_dismissed" = "Verworfen";
+"admin_state_throttled" = "%1$d durch das Spamlimit blockiert";
+"admin_action_failed" = "Aktion fehlgeschlagen: %1$@";
+"admin_active_users" = "%1$d aktive Nutzer";
+"admin_active_users_split" = "Android %1$d · iOS %2$d · letzte 10 Minuten";
+"admin_active_users_unknown" = "Aktive Nutzer: noch keine Daten";
+"admin_stats_title" = "Kontrollstatistik (letzte 30 Tage)";
+"admin_stats_load" = "Statistik laden";
+"admin_stats_loading" = "Statistik wird geladen…";
+"admin_stats_total" = "%1$d Meldungen auf %2$d Bahnen";
+"admin_stats_by_line" = "Nach Linie";
+"admin_stats_by_weekday" = "Nach Wochentag";
+"admin_stats_by_hour" = "Nach Uhrzeit";
+"admin_stats_by_station" = "Häufigste Stationen";
+"admin_stats_failed" = "Die Statistik konnte nicht geladen werden.";
+"admin_routes_rebuild" = "Linienverläufe für alle Städte neu erstellen";
+"admin_routes_rebuilt" = "Linienverläufe werden neu erstellt.";

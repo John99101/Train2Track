@@ -1,0 +1,21 @@
+Privacy Policy
+Last updated: placeholder
+
+This text is a placeholder. The public source code does not contain the privacy policy of the Train2Track service.
+
+1. If you publish this app
+Whoever publishes or operates a version of this app is responsible for the personal data it processes. Put your own privacy policy here. It must describe exactly what your version does.
+
+2. What this code processes
+As a starting point, this is what the code in this repository does:
+• each installation signs in anonymously and gets a random identifier
+• reports and delay votes are stored on the server under a name calculated from the identifier and the journey, together with a note of which identifier they belong to that no app can read
+• while the app is open it sends a signal with the identifier, the time and the platform, so that active installations can be counted
+• the server counts the reports and votes of each identifier for a short time to limit misuse
+• the location is used on the device only and is never sent to the server
+• usage statistics (Android) are off until the user switches them on
+• advertising is requested only after the user has answered the consent dialog
+• requests for live data and map tiles reach the providers of that data with the IP address of the device
+
+3. The original service
+The privacy policy of Train2Track is available on its website.

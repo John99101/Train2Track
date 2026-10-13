@@ -1,0 +1,156 @@
+/* Bottom navigation */
+"nav_feed" = "Feed";
+"nav_map" = "Map";
+"nav_settings" = "Settings";
+
+/* Feed */
+"feed_city" = "City";
+"feed_trains_live" = "%1$d vehicles live in %2$@";
+"feed_trains_delayed" = "%1$d vehicles in %2$@ · live data delayed";
+"feed_unavailable" = "Live feed unavailable, retrying…";
+"feed_looking" = "Looking for live vehicles in %1$@…";
+"label_sbahn" = "S-Bahn";
+"label_ubahn" = "U-Bahn";
+"label_bus" = "Bus";
+"label_tram" = "Tram";
+"feed_filter_all" = "All";
+"feed_filter_reports" = "Current reports";
+"feed_no_reports" = "No trains currently reported here.";
+"feed_filter" = "Filter";
+"feed_all_lines" = "All lines";
+"feed_search_hint" = "Search line or station";
+
+/* Map */
+"map_trains_live" = "%1$d trains live · move the map to explore";
+"map_trains_delayed" = "%1$d trains · live data delayed";
+"map_other_rail" = "Rail";
+
+/* Ads */
+"ad_label" = "Ad";
+"ad_skip" = "Skip ad";
+
+/* Report */
+"report_title" = "Report";
+"report_inspection_title" = "Ticket inspection";
+"report_direction" = "Direction";
+"report_movement" = "Movement";
+"report_control_hint" = "You are reporting that a ticket inspection is currently happening on this train. This information helps riders keep a valid ticket ready. It must never be used to travel without paying.";
+"movement_entered" = "On board";
+"movement_exited" = "Has left";
+"report_submit" = "Submit report";
+"report_legal_note" = "This app is an information service only. It does not help avoid fares or inspections. Always carry a valid ticket for your journey.";
+"buy_ticket" = "Buy a valid ticket";
+"delay_on_time" = "On time";
+"delay_late" = "+%d min";
+"delay_early" = "%d min early";
+"delay_scheduled" = "Scheduled";
+"delay_vote_title" = "Is this train delayed?";
+"delay_vote_sub" = "Help other riders. Confirm the delay or report the train is on time.";
+"delay_vote_yes" = "Late";
+"delay_vote_no" = "On time";
+"delay_vote_thanks_late" = "Thanks! You reported this train as late.";
+"delay_vote_thanks_on_time" = "Thanks! You reported this train as on time.";
+"delay_confirmed_count" = "%d confirm delay";
+"disruptions_banner" = "%d live disruption(s)";
+"disruptions_show" = "Show";
+"disruptions_hide" = "Hide";
+"report_submitting" = "Submitting…";
+"report_error_send" = "That did not work. Please check your connection and try again.";
+"report_success_entered" = "Thanks! Other riders now see a ticket inspection on this train.";
+"report_success_exited" = "Thanks! Your note that the inspection has left this train is saved.";
+"report_close" = "Close";
+"report_no_train" = "Open a train on the Map or Feed to report it.";
+
+/* Onboarding */
+"onboarding_skip" = "Skip";
+"onboarding_next" = "Next";
+"onboarding_start" = "Get started";
+"ob1_title" = "Live trains on the map";
+"ob1_body" = "Watch S-Bahn, U-Bahn and more move in real time across your city.";
+"ob2_title" = "Tap a train to report";
+"ob2_body" = "Open a vehicle and choose: “On board” reports a ticket inspection on this journey, “Has left” ends your report.";
+"ob3_title" = "Browse by city";
+"ob3_body" = "Pick a city in the Feed to see all its S-Bahn, U-Bahn, tram and bus lines as a live list.";
+
+/* Consent */
+"consent_title" = "Before you start";
+"consent_intro" = "The app only uses what it needs to show live public transport. The option below is off unless you turn it on. Google asks you about advertising in a separate dialog. You can change all of this later in Settings, or delete your data at any time.";
+"consent_location_title" = "Location";
+"consent_location_desc" = "Preselects your city and shows your position on the map. Your location stays on your phone.";
+"consent_continue" = "Continue";
+
+/* Settings */
+"settings_title" = "Privacy & data";
+"settings_intro" = "Manage what Train2Track is allowed to do with your data, in line with the EU General Data Protection Regulation (GDPR).";
+"settings_location" = "Location";
+"settings_ad_privacy" = "Ad privacy choices";
+"settings_language" = "Language";
+"lang_system" = "System default";
+"settings_theme" = "Appearance";
+"theme_light" = "Light";
+"theme_dark" = "Dark";
+"settings_view_policy" = "View privacy policy";
+"settings_view_legal" = "View legal notice";
+"settings_about" = "Data sources and open source";
+"settings_report_content" = "Report content";
+"settings_random_id" = "Your random ID";
+"settings_random_id_desc" = "Name this ID when you write to us about your data. It does not say who you are.";
+"settings_random_id_copy" = "Copy ID";
+"settings_random_id_copied" = "Copied.";
+"settings_delete" = "Delete my data";
+
+/* Data sources and open source */
+"about_title" = "Data sources and open source";
+"about_intro" = "Train2Track uses open data. The providers are not responsible for the app.";
+"about_transit_title" = "Timetable and live data";
+"about_transit_body" = "Transitous, an open routing service run by volunteers. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.";
+"about_disruptions_title" = "Disruption notices";
+"about_disruptions_body" = "gtfs.de, under the licence CC BY SA 4.0.";
+"about_map_title" = "Map";
+"about_map_body" = "Apple Maps. The terms and attributions of Apple apply.";
+"about_converted" = "The data is shortened and converted for display. Converted data from sources under the licence CC BY SA stays under that licence.";
+"about_open_source_title" = "Open source";
+"about_open_source_body" = "The source code of the apps and of the server is public under the licence GNU AGPL 3.0. The name Train2Track and the logo are not part of that licence.";
+"about_github" = "Source code on GitHub";
+"settings_delete_desc" = "This withdraws all consent, disconnects future activity from your past reports, and erases everything on our servers that is linked to your device identifier.";
+
+/* Privacy policy */
+"privacy_title" = "Privacy policy";
+"legal_title" = "Legal notice";
+
+/* Account / server (server) */
+"nav_admin" = "Admin";
+"settings_delete_done" = "Your data has been deleted.";
+"settings_delete_failed" = "Deleting on the server failed. Please try again or contact us by mail.";
+"map_loading" = "Loading live trains…";
+"report_subtitle" = "Share live information with other riders.";
+
+/* Admin console (only with the admin claim) */
+"admin_restricted_title" = "Restricted";
+"admin_restricted_body" = "This console is only available to admins.";
+"admin_title" = "Admin console";
+"admin_sub" = "Check reported trains: verify them or dismiss false reports.";
+"admin_dismiss" = "Dismiss";
+"admin_verify" = "Verify";
+"admin_restore" = "Restore";
+"admin_reported_trains" = "Reported trains";
+"admin_no_reports" = "No trains are reported right now.";
+"admin_report_counts" = "%1$d on board · %2$d left";
+"admin_state_verified" = "Verified";
+"admin_state_dismissed" = "Dismissed";
+"admin_state_throttled" = "%1$d blocked by the spam limit";
+"admin_action_failed" = "Action failed: %1$@";
+"admin_active_users" = "%1$d active users";
+"admin_active_users_split" = "Android %1$d · iOS %2$d · last 10 minutes";
+"admin_active_users_unknown" = "Active users: no data yet";
+"admin_stats_title" = "Inspection statistics (last 30 days)";
+"admin_stats_load" = "Load statistics";
+"admin_stats_loading" = "Loading statistics…";
+"admin_stats_total" = "%1$d reports on %2$d trains";
+"admin_stats_by_line" = "By line";
+"admin_stats_by_weekday" = "By weekday";
+"admin_stats_by_hour" = "By time of day";
+"admin_stats_by_station" = "Top stations";
+"admin_stats_failed" = "Statistics could not be loaded.";
+"admin_routes_rebuild" = "Rebuild line routes for all cities";
+"admin_routes_rebuilt" = "Line routes are being rebuilt.";

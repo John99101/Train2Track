@@ -1,0 +1,10 @@
+Legal Notice and Terms of Use
+Last updated: placeholder
+
+This text is a placeholder. The public source code does not contain the legal notice and the terms of use of the Train2Track service.
+
+1. If you publish this app
+Whoever publishes or operates a version of this app is its operator. Put your own legal notice and terms of use here: who you are, how you can be reached, and the rules under which your service may be used, as the law of your country requires.
+
+2. The original service
+The legal notice and the terms of use of Train2Track are available on its website.

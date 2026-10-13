@@ -1,0 +1,3 @@
+/* System permission texts (shown by iOS). No dashes. */
+"NSLocationWhenInUseUsageDescription" = "Used only to show your city in the Feed and your position on the map. Your location stays on your device.";
+"NSUserTrackingUsageDescription" = "Allows personalised ads. You can decline and still use the app fully.";

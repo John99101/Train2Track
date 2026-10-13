@@ -29,6 +29,20 @@ interface LiveApiService {
 interface LiveRoutesService {
     @GET("api/routes/{city}")
     suspend fun routes(@Path("city") cityId: String): RoutesDto
+
+    /**
+     * The route of one line the city's set does not have yet (a long distance
+     * train, a night line). The server builds it once from the journey [tripId],
+     * which must be running on that line, and keeps it for everybody. 404 when
+     * there is none.
+     */
+    @GET("api/route/{city}/{mode}/{label}/{trip}")
+    suspend fun route(
+        @Path("city") cityId: String,
+        @Path("mode") mode: String,
+        @Path("label") label: String,
+        @Path("trip") tripId: String
+    ): RouteDto
 }
 
 /**
@@ -61,6 +75,14 @@ data class RoutesDto(
     val city: String = "",
     val built: Long = 0,
     val routes: List<List<String>> = emptyList()
+)
+
+/** One row [label, mode, colour hex, encoded polyline (precision 5)]. */
+@Serializable
+data class RouteDto(
+    val v: Int = 1,
+    val city: String = "",
+    val route: List<String> = emptyList()
 )
 
 /**

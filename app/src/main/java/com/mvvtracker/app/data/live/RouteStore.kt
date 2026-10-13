@@ -19,8 +19,9 @@ fun routeKey(mode: String, label: String) = "$mode|$label"
 
 /**
  * Full line routes per city (every S-Bahn, U-Bahn, tram, bus and regional line),
- * built once a day on the server and kept on the device, so the map draws them
- * right away instead of fetching each line again on every visit.
+ * kept by the server and saved on the device, so the map draws them right away
+ * instead of fetching each line again on every visit. All routes come from the
+ * Train2Track server: the app never asks the timetable service for one itself.
  */
 @Singleton
 class RouteStore @Inject constructor(
@@ -41,7 +42,7 @@ class RouteStore @Inject constructor(
     /**
      * Downloads the city's routes when the saved copy is missing or older than a
      * day; returns the new routes, or null when nothing changed or the server is
-     * unreachable (the saved copy and on-demand fetching keep working).
+     * unreachable (the saved copy and [fetchLine] keep working).
      */
     suspend fun refreshIfStale(cityId: String): Map<String, List<DoubleArray>>? = withContext(Dispatchers.IO) {
         val saved = read(cityId)
@@ -50,7 +51,7 @@ class RouteStore @Inject constructor(
             ?.filter { it.size >= 4 && it[3].isNotEmpty() }
             ?.takeIf { it.isNotEmpty() }
             ?: return@withContext null
-        // Keep lines only fetched on demand that the server set does not have.
+        // Keep single lines fetched before that this copy of the set does not have.
         val serverKeys = fresh.map { routeKey(it[1], it[0]) }.toSet()
         val extras = saved?.rows.orEmpty().filter { it.size >= 4 && routeKey(it[1], it[0]) !in serverKeys }
         val rows = fresh + extras
@@ -58,16 +59,26 @@ class RouteStore @Inject constructor(
         decode(rows)
     }
 
-    /** Saves a route fetched on demand (a line the server set did not have yet). */
-    suspend fun addOnDemand(cityId: String, mode: String, label: String, points: List<DoubleArray>) =
+    /**
+     * The route of one line the saved set does not have (a long distance train, a
+     * night line), from the server, and saves it for the city. [tripId] is a
+     * vehicle running on that line right now: the server builds the route from it
+     * once for everybody. null when the server has none or cannot be reached.
+     */
+    suspend fun fetchLine(cityId: String, mode: String, label: String, tripId: String): List<DoubleArray>? =
         withContext(Dispatchers.IO) {
+            val row = runCatching { routesApi.route(cityId, mode, label, tripId).route }.getOrNull()
+                ?.takeIf { it.size >= 4 && it[3].isNotEmpty() }
+                ?: return@withContext null
+            val points = GeoPolyline.decode(row[3]).takeIf { it.size >= 2 } ?: return@withContext null
             lock.withLock {
                 val saved = read(cityId)
                 val rows = saved?.rows.orEmpty().filterNot { it.size >= 2 && it[0] == label && it[1] == mode } +
-                    listOf(listOf(label, mode, "", GeoPolyline.encode(points)))
+                    listOf(listOf(label, mode, row[2], row[3]))
                 // fetchedAt 0 when there is no server copy yet, so it is still fetched.
                 writeLocked(cityId, SavedRoutes(saved?.fetchedAt ?: 0L, rows))
             }
+            points
         }
 
     private fun decode(rows: List<List<String>>): Map<String, List<DoubleArray>> =

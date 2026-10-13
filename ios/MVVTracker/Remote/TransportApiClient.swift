@@ -4,10 +4,13 @@ import MVVTrackerCore
 /// Live map data source: **transitous** (https://transitous.org), a community-run
 /// open MOTIS instance. No API key. Swift port of `TransportApiService.kt`
 /// (Retrofit) using URLSession. DTOs live in MVVTrackerCore.
+///
+/// The app only asks transitous itself when the Train2Track server does not answer
+/// or when the map shows an area outside the supported cities. It asks for nothing
+/// else: line routes come from the Train2Track server only (`LiveApiClient.route`).
 protocol TransportApi {
     func mapTrips(min: String, max: String, zoom: Int,
                   startTime: String, endTime: String) async throws -> [MapTripSegment]
-    func trip(tripId: String) async throws -> TripResponse
 }
 
 struct TransportApiClient: TransportApi {
@@ -27,11 +30,6 @@ struct TransportApiClient: TransportApi {
             "startTime": startTime, "endTime": endTime
         ])
         return try await get(url, as: [MapTripSegment].self)
-    }
-
-    func trip(tripId: String) async throws -> TripResponse {
-        let url = try makeURL(path: "api/v1/trip", query: ["tripId": tripId])
-        return try await get(url, as: TripResponse.self)
     }
 
     // MARK: - Plumbing

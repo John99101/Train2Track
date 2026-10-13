@@ -48,6 +48,8 @@ final class LiveMapViewModel: ObservableObject {
     // Line routes for the current city (or free map area).
     private var routeByKey: [String: [GeoPoint]] = [:]
     private var routeInFlight: Set<String> = []
+    /// A line the server had no route for: when it may be asked again.
+    private var routeRetryAt: [String: Date] = [:]
     private var routeScope: String?
     private var runningRouteFetches = 0
     private var routeQueue: [(key: String, seg: LiveSegment, scope: String?)] = []
@@ -216,6 +218,7 @@ final class LiveMapViewModel: ObservableObject {
         routeScope = scope
         routeByKey = [:]
         routeInFlight = []
+        routeRetryAt = [:]
         routeQueue = []
         routes = [:]
         guard case .city = src else { return }
@@ -232,16 +235,21 @@ final class LiveMapViewModel: ObservableObject {
         }
     }
 
-    /// Makes sure the routes for `keys` the Map wants to draw are there: anything
-    /// missing from the route set is fetched once from the trip of a vehicle
-    /// currently on that line (at most 5 at a time), and saved for the city.
+    /// Makes sure the routes for `keys` the Map wants to draw are there: a line
+    /// missing from the city's route set is asked from the Train2Track server once
+    /// (`RouteStore.fetchLine`, at most 5 at a time), with a vehicle currently on
+    /// that line, and saved for the city. The app never asks the timetable service
+    /// for a route itself, so outside the supported cities no routes are drawn.
     func ensureRoutes(_ keys: Set<String>) {
-        let scope = routeScope
+        // Only inside a supported city (nil or a free map area: nothing to fetch).
+        guard routeScope?.hasPrefix("box:") == false else { return }
+        let now = Date()
         for key in keys {
             if routeByKey[key] != nil || routeInFlight.contains(key) { continue }
+            if let retryAt = routeRetryAt[key], now < retryAt { continue }
             guard let seg = segments.first(where: { $0.tripId != nil && routeKey(mode: $0.mode, label: $0.label) == key }) else { continue }
             routeInFlight.insert(key)
-            routeQueue.append((key, seg, scope))
+            routeQueue.append((key, seg, routeScope))
         }
         pumpRouteQueue()
     }
@@ -252,29 +260,24 @@ final class LiveMapViewModel: ObservableObject {
             runningRouteFetches += 1
             Task { [weak self] in
                 guard let self else { return }
-                let pts = await self.fetchTripRoute(job.seg.tripId!)
+                var pts: [GeoPoint]?
+                if let scope = job.scope {
+                    pts = await RouteStore.shared.fetchLine(scope, mode: job.seg.mode, label: job.seg.label,
+                                                            tripId: job.seg.tripId!)
+                }
                 self.runningRouteFetches -= 1
-                if let pts, pts.count >= 2, self.routeScope == job.scope {
-                    self.routeByKey[job.key] = pts
-                    self.routes = self.routeByKey
-                    if let scope = job.scope, !scope.hasPrefix("box:") {
-                        await RouteStore.shared.addOnDemand(scope, mode: job.seg.mode, label: job.seg.label, points: pts)
+                if self.routeScope == job.scope {
+                    if let pts {
+                        self.routeByKey[job.key] = pts
+                        self.routes = self.routeByKey
+                    } else {
+                        // No route for this line right now: leave the server alone for a while.
+                        self.routeRetryAt[job.key] = Date().addingTimeInterval(5 * 60)
                     }
                 }
                 self.routeInFlight.remove(job.key)
                 self.pumpRouteQueue()
             }
         }
-    }
-
-    private nonisolated func fetchTripRoute(_ tripId: String) async -> [GeoPoint]? {
-        guard let resp = try? await TransportApiClient().trip(tripId: tripId) else { return nil }
-        let pts = resp.legs.flatMap { leg -> [GeoPoint] in
-            guard let g = leg.legGeometry, let p = g.points else { return [] }
-            return GeoPolyline.decode(p, precision: g.precision)
-        }
-        if pts.isEmpty { return nil }
-        // Thin the dense precision-7 line (~3 m tolerance) so it is cheap to draw.
-        return GeoPolyline.simplify(pts, toleranceDeg: 0.00003)
     }
 }

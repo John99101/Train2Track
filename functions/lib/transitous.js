@@ -11,10 +11,13 @@
 const crypto = require("crypto");
 const { CITIES, cityBox } = require("./cities");
 const polyline = require("./polyline");
+const { version } = require("../package.json");
 
 const BASE = "https://api.transitous.org";
-// transitous rejects generic user agents (usage policy), so identify ourselves.
-const USER_AGENT = "Train2Track/1.0 (+https://example.invalid; contact@example.invalid)";
+// transitous asks every client to say who it is (usage policy): name, version and
+// a contact. The version is the one in functions/package.json: raise it there with
+// every change to the server.
+const USER_AGENT = `Train2Track/${version} (server; +https://example.invalid; contact@example.invalid)`;
 
 // Modes the apps show (same set as LiveMapViewModel.SHOWN_MODES).
 const SHOWN_MODES = new Set([
@@ -193,12 +196,20 @@ async function tripRoute(tripId) {
 }
 
 /**
- * Full line routes for every local line currently running in the city, merged
- * over [previous] routes so lines that are not running right now (night, weekend
- * only lines) are kept. Returns rows [label, mode, colour, encodedPolyline].
+ * Line routes for the local lines currently running in the city, merged over the
+ * [previous] routes, so lines that are not running right now (night, weekend
+ * only lines) are kept.
+ *
+ * A line [previous] already has is NOT asked again: its route rarely changes, and
+ * transitous must not be asked for thousands of journeys the server already
+ * knows. Pass full = true to fetch every running line anew (the admin button).
+ *
+ * Returns { rows, asked }: rows [label, mode, colour, encodedPolyline], and for
+ * how many journeys transitous was asked.
  */
-async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity } = {}) {
+async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full = false } = {}) {
   const segs = await mapTrips(cityId, LIVE_WINDOW.from, LIVE_WINDOW.to);
+  const merged = new Map(previous.map((row) => [`${row[1]}|${row[0]}`, row]));
   const reps = new Map();   // "mode|label" -> { label, mode, color, tripId }
   for (const seg of segs) {
     if (!ROUTE_MODES.has(seg.mode)) continue;
@@ -206,19 +217,17 @@ async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity } = {}
     if (!tripId) continue;
     const label = labelOf(seg);
     const key = `${seg.mode}|${label}`;
-    if (!reps.has(key)) {
-      reps.set(key, { label, mode: seg.mode, color: (seg.routeColor || "").replace(/^#/, ""), tripId });
-    }
+    if (reps.has(key) || (!full && merged.has(key))) continue;
+    reps.set(key, { label, mode: seg.mode, color: (seg.routeColor || "").replace(/^#/, ""), tripId });
   }
   const todo = [...reps.values()];
   const polys = await mapLimit(todo, 8, (r) =>
     Date.now() > deadlineMs ? Promise.resolve(null) : tripRoute(r.tripId));
 
-  const merged = new Map(previous.map((row) => [`${row[1]}|${row[0]}`, row]));
   todo.forEach((r, i) => {
     if (polys[i]) merged.set(`${r.mode}|${r.label}`, [r.label, r.mode, r.color, polys[i]]);
   });
-  return [...merged.values()];
+  return { rows: [...merged.values()], asked: todo.length };
 }
 
 module.exports = {

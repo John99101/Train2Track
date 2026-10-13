@@ -76,34 +76,48 @@ exports.api = onRequest(
   createApi({ db, logger })
 );
 
-async function rebuildAllRoutes() {
+/**
+ * Brings the line routes of all cities up to date. Normally only the lines a
+ * city's set does not have yet are asked from transitous; with full = true every
+ * running line is fetched anew. Returns per city how many lines the set has and
+ * for how many journeys transitous was asked.
+ */
+async function refreshAllRoutes({ full }) {
   const result = {};
   for (const city of Object.keys(CITIES)) {
     try {
-      result[city] = (await rebuildCityRoutes(db, city)).length;
+      const { rows, asked } = await rebuildCityRoutes(db, city, { full });
+      result[city] = { lines: rows.length, asked };
     } catch (e) {
       logger.warn(`routes ${city} failed: ${e.message}`);
       result[city] = `error: ${e.message}`;
     }
   }
-  logger.info("routes rebuilt", result);
+  logger.info(full ? "routes rebuilt" : "routes topped up", result);
   return result;
 }
 
 /**
- * Daily, at a busy time of day so (almost) every line is running: refresh the
- * full line routes of all cities. Lines not seen today are kept from earlier
- * runs, so the set grows to cover every network of the city.
+ * Once a week, on Monday at a busy time of day so (almost) every line is running:
+ * add the lines the route sets do not have yet. Routes the server already has
+ * are kept and not asked again, so this costs transitous a handful of requests
+ * instead of thousands. A line that only runs at other times is added when an
+ * app first needs it (GET /api/route/..., see lib/liveApi.js).
  */
 exports.refreshRoutes = onSchedule(
-  { schedule: "30 8 * * *", timeZone: "Europe/Berlin", timeoutSeconds: 540, memory: "512MiB" },
-  rebuildAllRoutes
+  { schedule: "30 8 * * 1", timeZone: "Europe/Berlin", timeoutSeconds: 540, memory: "512MiB" },
+  () => refreshAllRoutes({ full: false })
 );
 
-/** Admin button in the app: rebuild the line routes right now. */
+/**
+ * Admin button in the app: fetch the route of every running line anew, right
+ * now. This is the only thing that replaces a stored route (after a timetable
+ * change, or when a line is drawn wrongly), and it asks transitous for several
+ * thousand journeys: use it rarely.
+ */
 exports.rebuildRoutes = onCall({ ...CALLABLE, timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
   requireAdmin(request);
-  return rebuildAllRoutes();
+  return refreshAllRoutes({ full: true });
 });
 
 // ---- Reports: spam limit + moderation -----------------------------------------

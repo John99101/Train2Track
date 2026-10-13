@@ -15,6 +15,11 @@ import retrofit2.http.Query
  * interpolate the vehicle's position along the polyline (see [GeoPolyline]) - so
  * trains move along their actual routes, updated every few seconds.
  *
+ * The app only asks transitous itself when the Train2Track server does not answer
+ * or when the map shows an area outside the supported cities (see
+ * LiveTripsRepository). It asks for nothing else: line routes come from the
+ * Train2Track server only.
+ *
  * In the Munich data, modes map as: METRO = S-Bahn (S1..S8), SUBWAY = U-Bahn
  * (U1..U6), REGIONAL_RAIL = RE/RB, HIGHSPEED_RAIL/LONG_DISTANCE = ICE/IC.
  */
@@ -28,43 +33,7 @@ interface TransportApiService {
         @Query("startTime") startTime: String,  // ISO-8601 UTC, e.g. 2026-08-19T21:42:00Z
         @Query("endTime") endTime: String
     ): List<MapTripSegment>
-
-    /** Full stop sequence (from origin to terminus) for a single trip. */
-    @GET("api/v1/trip")
-    suspend fun trip(@Query("tripId") tripId: String): TripResponse
 }
-
-@Serializable
-data class TripResponse(
-    val legs: List<TripLeg> = emptyList()
-)
-
-@Serializable
-data class TripLeg(
-    val from: TripStop? = null,
-    val to: TripStop? = null,
-    val intermediateStops: List<TripStop> = emptyList(),
-    val headsign: String? = null,
-    val routeShortName: String? = null,
-    val tripId: String? = null,
-    val mode: String? = null,
-    val legGeometry: LegGeometry? = null   // the full track shape of this leg
-)
-
-@Serializable
-data class LegGeometry(
-    val points: String? = null,   // encoded polyline
-    val precision: Int = 6        // decimal digits (MOTIS trip geometry is 7)
-)
-
-@Serializable
-data class TripStop(
-    val name: String? = null,
-    val departure: String? = null,
-    val arrival: String? = null,
-    val scheduledDeparture: String? = null,
-    val scheduledArrival: String? = null
-)
 
 @Serializable
 data class MapTripSegment(

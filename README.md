@@ -105,6 +105,9 @@ flowchart LR
 - **Live data.** The server asks Transitous once per city and hands every app the same
   compact snapshot. The apps calculate each vehicle's position from the snapshot and the
   track shapes.
+- **Line routes.** The server keeps the route of every line. It asks Transitous once
+  per line, tops the set up once a week with lines it does not have yet, and fetches a
+  missing line when an app first needs it. The apps never ask Transitous for a route.
 - **Reports.** The apps write reports and delay votes straight to Firestore. The rules
   in `firestore.rules` decide what an app may write. Cloud Functions apply the spam
   limit and the moderation.
@@ -207,6 +210,9 @@ cd ios && xcodegen generate && open Train2Track.xcodeproj
 
 # Shared iOS logic
 cd ios/MVVTrackerCore && swift test
+
+# How the server asks Transitous for line routes (no network needed)
+node functions/test/routes.test.js
 
 # Rules and functions on the Firebase emulators (needs Java 21 or newer)
 firebase emulators:exec --only auth,firestore,functions --project demo-t2t "node functions/test/hidden_names.test.js"

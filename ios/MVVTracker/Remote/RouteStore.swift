@@ -2,9 +2,10 @@ import Foundation
 import MVVTrackerCore
 
 /// Full line routes per city (every S-Bahn, U-Bahn, tram, bus and regional line),
-/// built once a day on the server and kept on the device (Application Support), so
-/// the map draws them right away instead of fetching each line on every visit.
-/// Keyed by `routeKey(mode:label:)`. Port of Android's `RouteStore`.
+/// kept by the server and saved on the device (Application Support), so the map
+/// draws them right away instead of fetching each line on every visit. All routes
+/// come from the Train2Track server: the app never asks the timetable service for
+/// one itself. Keyed by `routeKey(mode:label:)`. Port of Android's `RouteStore`.
 actor RouteStore {
     static let shared = RouteStore()
 
@@ -24,14 +25,14 @@ actor RouteStore {
 
     /// Downloads the city's routes when the saved copy is missing or older than a
     /// day; returns the new routes, or nil when nothing changed or the server is
-    /// unreachable (the saved copy and on-demand fetching keep working).
+    /// unreachable (the saved copy and `fetchLine` keep working).
     func refreshIfStale(_ cityId: String) async -> [String: [GeoPoint]]? {
         let saved = read(cityId)
         if let saved, nowMs() - saved.fetchedAt < Self.maxAgeMs { return nil }
         guard let rows = try? await api.routes(cityId) else { return nil }
         let fresh = rows.filter { $0.count >= 4 && !$0[3].isEmpty }
         if fresh.isEmpty { return nil }
-        // Keep lines only fetched on demand that the server set does not have.
+        // Keep single lines fetched before that this copy of the set does not have.
         let serverKeys = Set(fresh.map { routeKey(mode: $0[1], label: $0[0]) })
         let extras = (read(cityId)?.rows ?? []).filter { $0.count >= 4 && !serverKeys.contains(routeKey(mode: $0[1], label: $0[0])) }
         let all = fresh + extras
@@ -39,13 +40,21 @@ actor RouteStore {
         return decode(all)
     }
 
-    /// Saves a route fetched on demand (a line the server set did not have yet).
-    func addOnDemand(_ cityId: String, mode: String, label: String, points: [GeoPoint]) {
+    /// The route of one line the saved set does not have (a long distance train, a
+    /// night line), from the server, and saves it for the city. `tripId` is a
+    /// vehicle running on that line right now: the server builds the route from it
+    /// once for everybody. nil when the server has none or cannot be reached.
+    /// Port of Android's `RouteStore.fetchLine`.
+    func fetchLine(_ cityId: String, mode: String, label: String, tripId: String) async -> [GeoPoint]? {
+        guard let row = try? await api.route(cityId, mode: mode, label: label, tripId: tripId) else { return nil }
+        let points = GeoPolyline.decode(row[3])
+        guard points.count >= 2 else { return nil }
         let saved = read(cityId)
         let rows = (saved?.rows ?? []).filter { !($0.count >= 2 && $0[0] == label && $0[1] == mode) }
-            + [[label, mode, "", GeoPolyline.encode(points)]]
+            + [[label, mode, row[2], row[3]]]
         // fetchedAt 0 when there is no server copy yet, so it is still fetched.
         write(cityId, Saved(fetchedAt: saved?.fetchedAt ?? 0, rows: rows))
+        return points
     }
 
     private func decode(_ rows: [[String]]) -> [String: [GeoPoint]] {

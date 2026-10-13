@@ -13,8 +13,6 @@ import com.mvvtracker.app.data.model.GermanCity
 import com.mvvtracker.app.data.model.cityForBox
 import com.mvvtracker.app.data.model.reportCityAt
 import com.mvvtracker.app.data.model.reportScopeFor
-import com.mvvtracker.app.data.remote.GeoPolyline
-import com.mvvtracker.app.data.remote.TransportApiService
 import com.mvvtracker.app.data.repository.ReportScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -31,7 +29,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -77,7 +74,6 @@ class LiveMapViewModel @Inject constructor(
     private val liveTrips: LiveTripsRepository,
     private val shapes: ShapeStore,
     private val routeStore: RouteStore,
-    private val transportApi: TransportApiService,
     private val locationCityProvider: LocationCityProvider,
     private val reportScope: ReportScope
 ) : ViewModel() {
@@ -119,11 +115,13 @@ class LiveMapViewModel @Inject constructor(
     private val _dataDelayed = MutableStateFlow(false)
     val dataDelayed: StateFlow<Boolean> = _dataDelayed.asStateFlow()
 
-    // Full line routes (key = routeKey(mode, label)). For a city they come from the
-    // saved / server route set; lines missing there are fetched once on demand.
+    // Full line routes (key = routeKey(mode, label)). They come from the saved /
+    // server route set of the city; a line missing there is asked from the server
+    // once. Outside the supported cities no routes are drawn.
     private val routeByKey = ConcurrentHashMap<String, List<DoubleArray>>()
     private val routeInFlight = ConcurrentHashMap.newKeySet<String>()
-    private val routeSemaphore = Semaphore(5)          // cap parallel trip fetches
+    private val routeRetryAtMs = ConcurrentHashMap<String, Long>()   // a line the server had no route for
+    private val routeSemaphore = Semaphore(5)          // cap parallel route requests
     @Volatile private var routeScope: String? = null   // city id, or "box:lat,lon"
     private val _routes = MutableStateFlow<Map<String, List<DoubleArray>>>(emptyMap())
     val routes: StateFlow<Map<String, List<DoubleArray>>> = _routes.asStateFlow()
@@ -299,6 +297,7 @@ class LiveMapViewModel @Inject constructor(
         routeScope = scope
         routeByKey.clear()
         routeInFlight.clear()
+        routeRetryAtMs.clear()
         _routes.value = emptyMap()
         if (src !is Source.City) return
         // Saved routes first (instant), then the server set if the saved one is old.
@@ -317,15 +316,19 @@ class LiveMapViewModel @Inject constructor(
 
     /**
      * Makes sure the routes for [keys] (see [routeKey]) the Map wants to draw are
-     * there: anything missing from the route set is fetched once from the trip of a
-     * vehicle currently on that line, and saved for the city.
+     * there: a line missing from the city's route set is asked from the Train2Track
+     * server once (see [RouteStore.fetchLine]), with a vehicle currently on that
+     * line, and saved for the city. The app never asks the timetable service for a
+     * route itself, so outside the supported cities no routes are drawn.
      */
     fun ensureRoutes(keys: Set<String>) {
+        val scope = routeScope?.takeUnless { it.startsWith("box:") } ?: return
         val segs = live.segments
-        val scope = routeScope
+        val now = System.currentTimeMillis()
         val reps = LinkedHashMap<String, LiveSegment>()   // key -> a vehicle on that line
         for (key in keys) {
             if (routeByKey.containsKey(key) || key in routeInFlight || reps.containsKey(key)) continue
+            if (now < (routeRetryAtMs[key] ?: 0L)) continue
             val seg = segs.firstOrNull { it.tripId != null && routeKey(it.mode, it.label) == key } ?: continue
             reps[key] = seg
         }
@@ -333,31 +336,20 @@ class LiveMapViewModel @Inject constructor(
             routeInFlight.add(key)
             viewModelScope.launch {
                 routeSemaphore.withPermit {
-                    val pts = runCatching { fetchTripRoute(seg.tripId!!) }.getOrNull()
-                    if (pts != null && pts.size >= 2 && routeScope == scope) {
-                        routeByKey[key] = pts
-                        publishRoutes()
-                        if (scope != null && !scope.startsWith("box:")) {
-                            runCatching { routeStore.addOnDemand(scope, seg.mode, seg.label, pts) }
+                    val pts = runCatching { routeStore.fetchLine(scope, seg.mode, seg.label, seg.tripId!!) }.getOrNull()
+                    if (routeScope == scope) {
+                        if (pts != null) {
+                            routeByKey[key] = pts
+                            publishRoutes()
+                        } else {
+                            // No route for this line right now: leave the server alone for a while.
+                            routeRetryAtMs[key] = System.currentTimeMillis() + ROUTE_RETRY_MILLIS
                         }
                     }
                     routeInFlight.remove(key)
                 }
             }
         }
-    }
-
-    private suspend fun fetchTripRoute(tripId: String): List<DoubleArray>? = withContext(Dispatchers.Default) {
-        val resp = transportApi.trip(tripId)
-        val all = ArrayList<DoubleArray>()
-        for (leg in resp.legs) {
-            val g = leg.legGeometry ?: continue
-            val p = g.points ?: continue
-            all.addAll(GeoPolyline.decode(p, g.precision))
-        }
-        if (all.isEmpty()) return@withContext null
-        // Thin the dense precision-7 line (~3 m tolerance) so it is cheap to draw.
-        GeoPolyline.simplify(all, ROUTE_SIMPLIFY_TOLERANCE_DEG)
     }
 
     private fun Bounds.isReasonable(): Boolean {
@@ -379,7 +371,7 @@ class LiveMapViewModel @Inject constructor(
         const val LOCATION_MILLIS = 8_000L   // nearest-city refresh cadence
         const val MAX_SPAN_DEGREES = 1.2
         const val VIEWPORT_MARGIN = 0.25     // build markers a bit beyond the screen edge
-        const val ROUTE_SIMPLIFY_TOLERANCE_DEG = 0.00003   // ~3 m route-line thinning
+        const val ROUTE_RETRY_MILLIS = 5 * 60_000L         // a line without a route is asked again after this
 
         // Modes we surface in the app. Rail rapid transit + regional/long-distance,
         // plus (Phase 3) buses and trams.

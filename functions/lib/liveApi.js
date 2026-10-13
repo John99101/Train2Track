@@ -4,9 +4,13 @@
  *   GET /api/live/{city}    compact live snapshot      CDN cached ~20 s
  *   GET /api/shapes/{city}  track geometries by key    CDN cached 10 min
  *   GET /api/routes/{city}  full line routes           CDN cached 6 h
+ *   GET /api/route/{city}/{mode}/{label}/{tripId}
+ *                           one line the set lacks     asked from transitous once, then stored
  *
  * The CDN in front means transitous is asked about once per city per ~20 s no
- * matter how many devices are open. Each instance also keeps the last good live
+ * matter how many devices are open. The apps never ask transitous for a route
+ * themselves: a line the city's set does not have (a long distance train, a night
+ * line) is fetched here once and then belongs to the set for everybody. Each instance also keeps the last good live
  * snapshot, so a short transitous outage serves slightly older data (flagged
  * "stale") instead of failing.
  */
@@ -18,7 +22,11 @@ const LIVE_TTL_MS = 15 * 1000;
 const LIVE_STALE_MAX_MS = 10 * 60 * 1000;
 const SHAPES_TTL_MS = 10 * 60 * 1000;
 const ROUTES_TTL_MS = 30 * 60 * 1000;
-const ROUTES_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
+// The sets are topped up once a week (refreshRoutes). Only when that has not
+// happened for this long does a request top a set up itself.
+const ROUTES_MAX_AGE_MS = 21 * 24 * 3600 * 1000;
+// A line whose route could not be built is not tried again for this long.
+const ROUTE_MISS_TTL_MS = 10 * 60 * 1000;
 const ROUTES_BUILD_BUDGET_MS = 40 * 1000;   // Hosting gives a rewrite 60 s
 const CHUNK_CHARS = 700000;                  // stays well under Firestore's 1 MiB doc limit
 
@@ -26,6 +34,8 @@ const CC_LIVE = "public, max-age=10, s-maxage=20";
 const CC_STALE = "public, max-age=5, s-maxage=5";
 const CC_SHAPES = "public, max-age=600, s-maxage=600";
 const CC_ROUTES = "public, max-age=3600, s-maxage=21600";
+const CC_ROUTE = "public, max-age=3600, s-maxage=3600";
+const CC_ROUTE_MISS = "public, max-age=60, s-maxage=60";
 const CC_ERROR = "public, max-age=5, s-maxage=5";
 
 class Entry {
@@ -93,7 +103,8 @@ async function loadStoredRoutes(db, city) {
   return { built: meta.get("built") || 0, complete: meta.get("complete") !== false, routes: rows };
 }
 
-async function saveRoutes(db, city, rows, complete) {
+/** [built] = when the set was last built or topped up as a whole (not: one line added). */
+async function saveRoutes(db, city, rows, complete, built = Date.now()) {
   const chunks = [];
   let cur = [];
   let size = 0;
@@ -114,18 +125,24 @@ async function saveRoutes(db, city, rows, complete) {
   const batch = db.batch();
   old.docs.forEach((d) => { if (Number(d.id) >= chunks.length) batch.delete(d.ref); });
   chunks.forEach((c, i) => batch.set(ref.collection("chunks").doc(String(i)), { rows: JSON.stringify(c) }));
-  batch.set(ref, { v: 1, built: Date.now(), count: rows.length, chunks: chunks.length, complete });
+  batch.set(ref, { v: 1, built, count: rows.length, chunks: chunks.length, complete });
   await batch.commit();
 }
 
-/** Builds (or extends) a city's route set and stores it. Returns the rows. */
-async function rebuildCityRoutes(db, city, { deadlineMs = Infinity } = {}) {
+/**
+ * Tops up a city's route set with the lines it does not have yet (or, with
+ * full = true, fetches every running line anew) and stores it. Returns
+ * { rows, asked }: the set, and for how many journeys transitous was asked.
+ */
+async function rebuildCityRoutes(db, city, { deadlineMs = Infinity, full = false } = {}) {
   const prev = await loadStoredRoutes(db, city);
-  const rows = await T.buildRoutes(city, prev ? prev.routes : [], { deadlineMs });
+  const { rows, asked } = await T.buildRoutes(city, prev ? prev.routes : [], { deadlineMs, full });
   const complete = Date.now() <= deadlineMs;
   await saveRoutes(db, city, rows, complete);
-  return rows;
+  return { rows, asked };
 }
+
+const findRoute = (rows, mode, label) => rows.find((r) => r[0] === label && r[1] === mode) || null;
 
 // ---- Handler -----------------------------------------------------------------
 
@@ -153,18 +170,83 @@ function createApi({ db, logger }) {
     return send(req, res, e, CC_SHAPES);
   }
 
+  /** The city's route set, from memory or the database (built on the very first request). */
+  const routeSet = (city) => routes.load(city, ROUTES_TTL_MS, async () => {
+    let stored = await loadStoredRoutes(db, city);
+    if (!stored || !stored.routes.length || Date.now() - stored.built > ROUTES_MAX_AGE_MS) {
+      // First request for this city (or a very old set): build it now.
+      const { rows } = await rebuildCityRoutes(db, city, { deadlineMs: Date.now() + ROUTES_BUILD_BUDGET_MS });
+      stored = { built: Date.now(), complete: true, routes: rows };
+    }
+    return { v: 1, city, built: stored.built, routes: stored.routes };
+  });
+
   async function handleRoutes(req, res, city) {
-    const e = await routes.load(city, ROUTES_TTL_MS, async () => {
-      let stored = await loadStoredRoutes(db, city);
-      if (!stored || !stored.routes.length || Date.now() - stored.built > ROUTES_MAX_AGE_MS) {
-        // First request for this city (or a very old set): build it now.
-        const rows = await rebuildCityRoutes(db, city, { deadlineMs: Date.now() + ROUTES_BUILD_BUDGET_MS });
-        stored = { built: Date.now(), complete: true, routes: rows };
-      }
-      return { v: 1, city, built: stored.built, routes: stored.routes };
-    });
+    const e = await routeSet(city);
     if (!e.obj.routes.length) return sendError(res, 503, "routes_unavailable");
     return send(req, res, e, CC_ROUTES);
+  }
+
+  // ---- One line on demand ----------------------------------------------------
+  const lineMisses = new Map();     // "city|mode|label" -> when its route could not be built
+  const lineInflight = new Map();   // the same key -> the request that is fetching it
+
+  /**
+   * The route row of one line: from the city's set, or, when the set does not
+   * have the line, built once from the journey [trip] and added to the set.
+   * null when there is none.
+   */
+  async function lineRoute(city, mode, label, trip) {
+    // An instance that has just started has no set in memory yet: load it first.
+    const cached = routes.get(city) || await routeSet(city).catch(() => null);
+    const known = cached && findRoute(cached.obj.routes, mode, label);
+    if (known) return known;
+    const key = `${city}|${mode}|${label}`;
+    if (Date.now() - (lineMisses.get(key) || 0) < ROUTE_MISS_TTL_MS) return null;
+    if (lineInflight.has(key)) return lineInflight.get(key);
+    const pending = (async () => {
+      // Only for a journey that is really running on this line in this city right
+      // now. Without this check anybody could make this server ask transitous for
+      // any journey, or fill the set with invented lines.
+      const snap = (await live.load(city, LIVE_TTL_MS, () => T.fetchLive(city))).obj;
+      const line = snap.lines.findIndex((l) => l[0] === label && l[1] === mode);
+      if (line < 0 || !snap.segs.some((s) => s[0] === line && s[1] === trip)) return null;
+
+      // Another server instance may have stored the line in the meantime.
+      const stored = await loadStoredRoutes(db, city);
+      const rows = stored ? stored.routes : [];
+      let row = findRoute(rows, mode, label);
+      if (!row) {
+        const poly = await T.tripRoute(trip).catch(() => null);
+        if (!poly) {
+          lineMisses.set(key, Date.now());
+          return null;
+        }
+        row = [label, mode, snap.lines[line][2] || "", poly];
+        rows.push(row);
+        // built stays as it was (0 for a new set): adding one line is not a build.
+        await saveRoutes(db, city, rows, stored ? stored.complete : false, stored ? stored.built : 0);
+        logger.info(`route ${city} ${mode} ${label}: added on demand`);
+      }
+      // Later requests of this instance find the line in memory. A set that has
+      // never been built stays out of memory, so /routes still builds it.
+      if (stored && stored.built) {
+        routes.entries.set(city, new Entry({ v: 1, city, built: stored.built, routes: rows }));
+      }
+      return row;
+    })().finally(() => lineInflight.delete(key));
+    lineInflight.set(key, pending);
+    return pending;
+  }
+
+  async function handleRoute(req, res, city, mode, label, trip) {
+    const valid = T.SHOWN_MODES.has(mode) && label && label.length <= 40 && trip && trip.length <= 300;
+    const row = valid ? await lineRoute(city, mode, label, trip) : null;
+    if (!row) {
+      res.set("Cache-Control", CC_ROUTE_MISS);
+      return res.status(404).json({ error: "route_unavailable" });
+    }
+    return send(req, res, new Entry({ v: 1, city, route: row }), CC_ROUTE);
   }
 
   return async (req, res) => {
@@ -174,14 +256,20 @@ function createApi({ db, logger }) {
     // the cache and make this function do the full work: refuse it cheaply.
     if (req.originalUrl.includes("?")) return sendError(res, 400, "no_query");
     // Through Hosting the path keeps its /api prefix; called directly it does not.
-    const parts = req.path.replace(/^\/api(?=\/|$)/, "").split("/").filter(Boolean);
-    if (parts.length !== 2) return sendError(res, 404, "not_found");
+    let parts;
+    try {
+      parts = req.path.replace(/^\/api(?=\/|$)/, "").split("/").filter(Boolean).map(decodeURIComponent);
+    } catch (_) {
+      return sendError(res, 404, "not_found");
+    }
     const [kind, city] = parts;
+    if (parts.length !== (kind === "route" ? 5 : 2)) return sendError(res, 404, "not_found");
     if (!CITIES[city]) return sendError(res, 404, "unknown_city");
     try {
       if (kind === "live") return await handleLive(req, res, city);
       if (kind === "shapes") return await handleShapes(req, res, city);
       if (kind === "routes") return await handleRoutes(req, res, city);
+      if (kind === "route") return await handleRoute(req, res, city, parts[2], parts[3], parts[4]);
       return sendError(res, 404, "not_found");
     } catch (err) {
       logger.error(`${kind} ${city} failed: ${err.message}`);

@@ -19,7 +19,7 @@ The app is free, needs no account and works with a random identifier that does n
 who you are. This repository holds the source code of the Android app, the iOS app and
 the server.
 
-Website: [train2track.web.app](https://train2track.web.app)
+Website: [train2track.de](https://train2track.de)
 
 <p align="center">
   <img src="docs/images/screenshot_map.png" alt="Map with live vehicles" width="200">

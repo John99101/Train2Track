@@ -41,11 +41,11 @@ import com.mvvtracker.app.R
 import com.mvvtracker.app.viewmodel.NativeAdViewModel
 import com.mvvtracker.app.viewmodel.SettingsViewModel
 
-private const val SKIPPABLE_AFTER_MS = 5_000
+private const val SKIPPABLE_AFTER_MS = 15_000
 
 /**
  * A real AdMob **native** ad rendered inside our own card, dismissible with an
- * "X" that appears after 5 seconds (a countdown ring shows until then). Native
+ * "X" that appears after 15 seconds (a countdown ring shows until then). Native
  * format is used precisely because it lets us own the layout + close control.
  *
  * The advert itself lives in [NativeAdViewModel], so it stays while the user
@@ -86,7 +86,7 @@ fun NativeAdSlot(
         }
     }
 
-    // The 5 s before the ad can be dismissed count once per ad, not once per visit.
+    // The 15 s before the ad can be dismissed count once per ad, not once per visit.
     LaunchedEffect(nativeAd) {
         if (nativeAd == null) return@LaunchedEffect
         adViewModel.markShown()

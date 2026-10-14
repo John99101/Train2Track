@@ -54,8 +54,8 @@ final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDelegate {
 }
 
 /// A real AdMob native ad rendered inside our own card, dismissible with an "X"
-/// that appears after 5 s (a countdown ring shows until then). Self-managing:
-/// after a dismiss it hides, then loads a fresh ad once the cooldown passes —
+/// that appears after 15 s (a countdown ring shows until then). Self-managing:
+/// after a dismiss it hides, then loads a fresh ad one minute later —
 /// instead of vanishing for the session. Nothing is requested before the user
 /// answered Google's consent dialog (see `AdsManager`). Port of `NativeAdSlot.kt`.
 struct NativeAdSlot: View {
@@ -64,10 +64,9 @@ struct NativeAdSlot: View {
     @ObservedObject private var loader = NativeAdLoader.shared
     @State private var elapsed = 0.0
     @State private var hidden = false
-    private let skipAfter = 5.0
-    // After a dismiss, wait a random 2–4 minutes before bringing a fresh ad back.
-    private let reloadMin = 120.0
-    private let reloadMax = 240.0
+    private let skipAfter = 15.0
+    // After a dismiss, a fresh ad pops up one minute later (the owner's choice).
+    private let reloadAfter = 60.0
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     private var canSkip: Bool { elapsed >= skipAfter }
@@ -93,8 +92,7 @@ struct NativeAdSlot: View {
         .onChange(of: hidden) { _, isHidden in
             guard isHidden else { return }
             Task {
-                let cooldown = Double.random(in: reloadMin...reloadMax)
-                try? await Task.sleep(nanoseconds: UInt64(cooldown * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(reloadAfter * 1_000_000_000))
                 elapsed = 0
                 if ads.canRequestAds { loader.reload() }
                 hidden = false

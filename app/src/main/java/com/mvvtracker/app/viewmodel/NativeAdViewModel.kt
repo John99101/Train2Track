@@ -14,14 +14,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
-import kotlin.random.Random
 
 /**
  * The advert of the Feed. It stays while the user switches between the tabs:
  * before, every return to the Feed asked Google for a new advert, which cost data
  * and made the switch slower. A new one is loaded only when there is none yet, when
- * the ad choice changed, when the last one is an hour old, or a few minutes after
- * the user closed it, and only while the Feed is on screen. Nothing is requested
+ * the ad choice changed, when the last one is an hour old, or one minute after the
+ * user closed it, and only while the Feed is on screen. Nothing is requested
  * before the user answered Google's consent dialog (see privacy/AdsConsent).
  */
 @HiltViewModel
@@ -36,7 +35,7 @@ class NativeAdViewModel @Inject constructor(
     /** The user closed the advert: the slot stays empty until [nextLoadAtMs]. */
     val closed: StateFlow<Boolean> = _closed.asStateFlow()
 
-    /** When the current advert was first on screen (it can be closed 5 s later); 0 = not yet. */
+    /** When the current advert was first on screen (it can be closed 15 s later); 0 = not yet. */
     var shownSinceMs = 0L
         private set
 
@@ -89,11 +88,11 @@ class NativeAdViewModel @Inject constructor(
         if (shownSinceMs == 0L) shownSinceMs = System.currentTimeMillis()
     }
 
-    /** The user closed the advert: a new one comes after a pause of a few minutes. */
+    /** The user closed the advert: a new one pops up one minute later. */
     fun close() {
         drop()
         _closed.value = true
-        nextLoadAtMs = System.currentTimeMillis() + Random.nextLong(RELOAD_MIN_MS, RELOAD_MAX_MS)
+        nextLoadAtMs = System.currentTimeMillis() + RELOAD_AFTER_CLOSE_MS
     }
 
     private fun drop() {
@@ -108,9 +107,8 @@ class NativeAdViewModel @Inject constructor(
     }
 
     private companion object {
-        // After a close, a fresh advert comes back after a random 2 to 4 minutes.
-        const val RELOAD_MIN_MS = 120_000L
-        const val RELOAD_MAX_MS = 240_000L
+        // After a close, a fresh advert pops up one minute later (the owner's choice).
+        const val RELOAD_AFTER_CLOSE_MS = 60_000L
         const val RETRY_AFTER_FAILURE_MS = 60_000L
         // Google advises not to show a native advert loaded more than an hour ago.
         const val MAX_AGE_MS = 60 * 60_000L

@@ -48,8 +48,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mvvtracker.app
         PRODUCT_NAME: Train2Track
-        MARKETING_VERSION: "0.5.0"
-        CURRENT_PROJECT_VERSION: "12"
+        MARKETING_VERSION: "0.5.1"
+        CURRENT_PROJECT_VERSION: "13"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MVVTracker/Resources/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"

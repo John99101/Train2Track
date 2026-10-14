@@ -8,7 +8,9 @@ import android.graphics.ColorFilter
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.DashPathEffect
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Point
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -55,6 +57,7 @@ import com.mvvtracker.app.viewmodel.LiveMapViewModel
 import com.mvvtracker.app.viewmodel.TrainPosition
 import kotlinx.coroutines.channels.Channel
 import kotlin.math.abs
+import kotlin.math.pow
 import org.osmdroid.events.DelayedMapListener
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
@@ -69,7 +72,6 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.advancedpolyline.MonochromaticPaintList
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
@@ -147,7 +149,7 @@ fun LiveTrainMap(
     // Persistent overlays reused across position ticks (see update below): moving a
     // marker or keeping a static route line is far cheaper than rebuilding them all
     // every tick. Two layers, so the routes always stay under the vehicles.
-    val routeLayer = remember { Layer<Polyline>(tappable = false) }
+    val routeLayer = remember { RouteLayer() }
     val vehicleLayer = remember { Layer<Marker>(tappable = true) }
     val routeLines = remember { HashMap<String, RouteLine>() }
     val badges = remember { HashMap<String, Badge>() }
@@ -354,7 +356,7 @@ fun LiveTrainMap(
                     drawn.routeOrder = routeLines.values.sortedWith(
                         compareBy<RouteLine>({ it.key == selectedRoute }, { it.rank }, { it.key })
                     )
-                    routeLayer.items = drawn.routeOrder.map { it.line }
+                    routeLayer.items = drawn.routeOrder.flatMap { listOf(it.edgeLine, it.line) }
                 }
 
                 // TRAIN MARKERS (reused): move existing markers, add new ones, drop
@@ -516,6 +518,100 @@ private class DrawnStyle {
  * A group of overlays drawn in list order (the last one on top). Taps go to the top
  * one first, or to none when the layer is not [tappable].
  */
+/**
+ * The route lines. They are drawn into a picture of the map area only when they or
+ * the map view change, and every frame in between only copies that picture. While
+ * the vehicles glide the map is redrawn up to 30 times a second: drawing the lines
+ * of a big city every time took 70 to 500 ms per frame on a test device, copying
+ * the picture takes almost nothing. While the map is moved or zoomed the picture
+ * moves and scales with it, and it is drawn anew as soon as the map stands still
+ * (or has moved too far).
+ */
+private class RouteLayer : Overlay() {
+    /** The lines in draw order, the top one last. Setting them draws the picture anew. */
+    var items: List<Polyline> = emptyList()
+        set(value) {
+            field = value
+            stale = true
+        }
+
+    private var stale = true
+    private var picture: Bitmap? = null
+    // The view the picture was drawn for: its zoom, and where the map centre of that
+    // moment lay on it. From these the picture can be moved and scaled to the map.
+    private var pictureZoom = 0.0
+    private var pictureRef: GeoPoint? = null
+    private val pictureRefAt = Point()
+    // The view of the previous frame: the same view twice in a row = the map stands still.
+    private var lastZoom = Double.NaN
+    private val lastRefAt = Point()
+    private val refAt = Point()
+    private val matrix = Matrix()
+    private val scaledPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+    override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
+        if (shadow) return
+        val projection = mapView.projection
+        val w = mapView.width
+        val h = mapView.height
+        if (w <= 0 || h <= 0) return
+        val zoom = projection.zoomLevel
+        val ref = pictureRef
+        val current = picture
+        if (stale || current == null || ref == null || current.width != w || current.height != h) {
+            canvas.drawBitmap(drawPicture(projection, w, h, zoom), 0f, 0f, null)
+            return
+        }
+        projection.toPixels(ref, refAt)
+        val scale = 2.0.pow(zoom - pictureZoom).toFloat()
+        val dx = refAt.x - pictureRefAt.x * scale
+        val dy = refAt.y - pictureRefAt.y * scale
+        val still = zoom == lastZoom && refAt.x == lastRefAt.x && refAt.y == lastRefAt.y
+        lastZoom = zoom
+        lastRefAt.set(refAt.x, refAt.y)
+        if (scale == 1f && dx == 0f && dy == 0f) {
+            canvas.drawBitmap(current, 0f, 0f, null)
+        } else if (still || abs(scale - 1f) > MAX_PICTURE_SCALE || abs(dx) > w * MAX_PICTURE_SHIFT || abs(dy) > h * MAX_PICTURE_SHIFT) {
+            canvas.drawBitmap(drawPicture(projection, w, h, zoom), 0f, 0f, null)
+        } else {
+            // Moving or zooming: follow with the old picture, and look again shortly.
+            matrix.setScale(scale, scale)
+            matrix.postTranslate(dx, dy)
+            canvas.drawBitmap(current, matrix, scaledPaint)
+            mapView.postInvalidateDelayed(SETTLE_CHECK_MILLIS)
+        }
+    }
+
+    private fun drawPicture(projection: Projection, w: Int, h: Int, zoom: Double): Bitmap {
+        val bitmap = picture?.takeIf { it.width == w && it.height == h }
+            ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { picture?.recycle(); picture = it }
+        bitmap.eraseColor(Color.TRANSPARENT)
+        val canvas = Canvas(bitmap)
+        for (i in items.indices) items[i].draw(canvas, projection)
+        pictureZoom = zoom
+        val ref = projection.fromPixels(w / 2, h / 2) as GeoPoint
+        pictureRef = ref
+        projection.toPixels(ref, pictureRefAt)
+        lastZoom = zoom
+        lastRefAt.set(pictureRefAt.x, pictureRefAt.y)
+        stale = false
+        return bitmap
+    }
+
+    override fun onDetach(mapView: MapView) {
+        items.forEach { it.onDetach(mapView) }
+        items = emptyList()
+        picture?.recycle()
+        picture = null
+    }
+}
+
+// The old picture of the route lines may be moved by this share of the map size or
+// scaled by this much before it is drawn anew while the map is still moving.
+private const val MAX_PICTURE_SHIFT = 0.4f
+private const val MAX_PICTURE_SCALE = 0.6f
+private const val SETTLE_CHECK_MILLIS = 120L
+
 private class Layer<T : Overlay>(private val tappable: Boolean) : Overlay() {
     var items: List<T> = emptyList()
 
@@ -545,7 +641,7 @@ private const val SNAP_DEGREES = 0.02
 
 // Route lines: a white edge on each side, pale unless tapped, a little wider when tapped.
 private const val LINE_EDGE_DP = 1f
-private const val PALE_LINE_ALPHA = 150
+private const val PALE_LINE_WHITE = 0.42f   // share of white in a line's pale colour
 private const val SELECTED_EXTRA_DP = 1.5f
 // How far from a line a tap still counts as a tap on it.
 private const val LINE_TAP_DP = 14f
@@ -577,34 +673,49 @@ private fun badgeAlpha(train: TrainPosition, flagged: Boolean): Float = when {
  * The route line of one line: a white edge underneath, the line's colour on top,
  * with a per-mode stroke style (S-Bahn solid, U-Bahn dashed, Tram dotted, Bus
  * dash-dot).
+ *
+ * Each is drawn as one path. Drawn as many short pieces, each with round ends, the
+ * lines of a big city took about 500 ms per frame on a test device (the map was
+ * redrawn up to 30 times a second while the vehicles move); as paths about 12 ms.
  */
 private class RouteLine(val key: String, train: TrainPosition, points: List<DoubleArray>, density: Float) {
     val rank = drawRank(train.mode)
-    private val edge = linePaint(Color.WHITE)
-    private val fill = linePaint(trainColorArgb(train.colorHex, train.label, train.mode)).apply {
-        pathEffect = dashForMode(train.mode, density)
+    private val geoPoints = points.map { GeoPoint(it[0], it[1]) }
+    /** The white edge, drawn first. */
+    val edgeLine = pathLine(Color.WHITE)
+    /** The line in its colour, drawn on top of the edge. Taps are matched against it. */
+    private val fullColor = trainColorArgb(train.colorHex, train.label, train.mode)
+    /** The line's colour mixed with white: opaque, so no part of the line is blended twice. */
+    private val paleColor = mixWithWhite(fullColor, PALE_LINE_WHITE)
+    val line = pathLine(paleColor).apply {
+        outlinePaint.pathEffect = dashForMode(train.mode, density)
     }
-    val line = Polyline().apply {
-        setPoints(points.map { GeoPoint(it[0], it[1]) })
-        // Drawn one after the other: first the edge, then the colour on top of it.
-        outlinePaintLists.add(MonochromaticPaintList(edge))
-        outlinePaintLists.add(MonochromaticPaintList(fill))
-    }
+    private val edge = edgeLine.outlinePaint
+    private val fill = line.outlinePaint
 
     fun style(tier: ZoomTier, selected: Boolean, density: Float) {
         val width = lineWidthDp(tier) + if (selected) SELECTED_EXTRA_DP else 0f
         fill.strokeWidth = width * density
-        // Over the white edge a see-through colour is a paler colour.
-        fill.alpha = if (selected) 255 else PALE_LINE_ALPHA
+        fill.color = if (selected) fullColor else paleColor
         edge.strokeWidth = (width + 2f * LINE_EDGE_DP) * density
     }
 
-    private fun linePaint(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
+    private fun pathLine(color: Int) = Polyline(null, true).apply {
+        setPoints(geoPoints)
+        outlinePaint.apply {
+            isAntiAlias = true
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
     }
+}
+
+/** [color] with the share [white] of white mixed in, fully opaque. */
+private fun mixWithWhite(color: Int, white: Float): Int {
+    fun mix(c: Int) = (c + (255 - c) * white).toInt().coerceIn(0, 255)
+    return Color.rgb(mix(Color.red(color)), mix(Color.green(color)), mix(Color.blue(color)))
 }
 
 /** Stroke pattern per transport mode (null = solid). */

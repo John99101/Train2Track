@@ -10,7 +10,11 @@ import MVVTrackerCore
 ///  - routes are persistent overlays (added once per shown line, dropped when the
 ///    line is no longer shown), styled per mode: S-Bahn solid, U-Bahn dashed,
 ///    Tram dotted, Bus dash-dot;
-///  - the visible area is reported (debounced) so only nearby vehicles are built.
+///  - the visible area is reported (debounced) so only nearby vehicles are built;
+///  - the badges follow the zoom like on Android: full badge when close, a small
+///    badge in between, a dot without a label when far. A reported vehicle keeps the
+///    full badge at every zoom, is never faded, has a red ring and a larger "!", and
+///    is drawn on top (then S-Bahn and U-Bahn, rail, tram, bus).
 struct LiveTrainMapView: UIViewRepresentable {
     let trains: [TrainPosition]
     let routes: [String: [GeoPoint]]
@@ -31,6 +35,7 @@ struct LiveTrainMapView: UIViewRepresentable {
         map.pointOfInterestFilter = .excludingAll
         map.register(TrainBadgeAnnotationView.self, forAnnotationViewWithReuseIdentifier: TrainBadgeAnnotationView.reuseId)
         context.coordinator.recenter(map, on: center, token: centerToken, animated: false)
+        context.coordinator.tier = badgeTier(longitudeSpan: map.region.span.longitudeDelta)
         return map
     }
 
@@ -51,6 +56,8 @@ struct LiveTrainMapView: UIViewRepresentable {
         private var annotations: [String: TrainAnnotation] = [:]
         private var routeOverlays: [String: RouteOverlay] = [:]
         private var boundsWork: DispatchWorkItem?
+        /// The badge size for the current zoom (see `badgeTier`).
+        var tier: BadgeTier = .mid
 
         /// One glide spans one position tick, so consecutive glides join into steady motion.
         private let glideSeconds = Double(LiveMapConfig.tickMillis) / 1000
@@ -108,7 +115,7 @@ struct LiveTrainMapView: UIViewRepresentable {
                     } else {
                         a.coordinate = target   // big jump: snap instead of sliding across
                     }
-                    if styleChanged, let v = map.view(for: a) as? TrainBadgeAnnotationView { v.apply(a) }
+                    if styleChanged, let v = map.view(for: a) as? TrainBadgeAnnotationView { v.apply(a, tier: tier) }
                 } else {
                     let a = TrainAnnotation(train: train, flagged: flagged)
                     annotations[key] = a
@@ -132,7 +139,7 @@ struct LiveTrainMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let a = annotation as? TrainAnnotation else { return nil }   // user location: default dot
             let v = mapView.dequeueReusableAnnotationView(withIdentifier: TrainBadgeAnnotationView.reuseId, for: a)
-            (v as? TrainBadgeAnnotationView)?.apply(a)
+            (v as? TrainBadgeAnnotationView)?.apply(a, tier: tier)
             return v
         }
 
@@ -149,6 +156,17 @@ struct LiveTrainMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             reportBounds(mapView, delay: 0.3)
+        }
+
+        /// Called while the map moves or zooms: the badges change size as soon as the
+        /// zoom crosses a step, not only when the gesture ends.
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            let next = badgeTier(longitudeSpan: mapView.region.span.longitudeDelta)
+            guard next != tier else { return }
+            tier = next
+            for a in annotations.values {
+                (mapView.view(for: a) as? TrainBadgeAnnotationView)?.apply(a, tier: next)
+            }
         }
 
         private func reportBounds(_ map: MKMapView, delay: TimeInterval) {
@@ -238,8 +256,10 @@ final class RouteRenderer: MKOverlayPathRenderer {
 }
 
 /// The badge view: a rounded square for rail (S-Bahn, U-Bahn, other trains) or a
-/// pill for bus/tram, in the line colour, with a red "!" corner when reported.
-/// Real-time trains are near solid; schedule-only trains are faded.
+/// pill for bus/tram, in the line colour, in the size the zoom asks for. A reported
+/// vehicle has the full size at every zoom, a red ring and a red "!", is never faded
+/// and lies on top. Otherwise real-time trains are near solid and schedule-only
+/// trains are faded.
 final class TrainBadgeAnnotationView: MKAnnotationView {
     static let reuseId = "train"
 
@@ -252,59 +272,101 @@ final class TrainBadgeAnnotationView: MKAnnotationView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func apply(_ a: TrainAnnotation) {
+    func apply(_ a: TrainAnnotation, tier: BadgeTier) {
         let t = a.train
+        // A reported vehicle keeps the full badge at every zoom.
+        let size: BadgeTier = a.flagged ? .near : tier
         image = BadgeRenderer.image(label: t.label, color: UIColor(t.displayColor),
-                                    flagged: a.flagged, elongated: t.mode == "BUS" || t.mode == "TRAM")
-        alpha = t.isRealtime ? 0.85 : 0.4
+                                    flagged: a.flagged, elongated: t.mode == "BUS" || t.mode == "TRAM", size: size)
+        alpha = a.flagged ? 1 : (t.isRealtime ? 0.85 : 0.4)
+        // Higher is drawn on top: bus, tram, rail, S-Bahn and U-Bahn, reported.
+        zPriority = MKAnnotationViewZPriority(rawValue: MKAnnotationViewZPriority.defaultUnselected.rawValue
+                                              + Float(drawRank(mode: t.mode, flagged: a.flagged)) * 10)
         accessibilityLabel = t.label
     }
 }
 
 /// Renders and caches the badge images (cheap per marker, expensive per render).
+/// Same shapes and sizes as Android's `createBadgeBitmap` and `createDotBitmap`.
 enum BadgeRenderer {
     private static var cache: [String: UIImage] = [:]
+    private static let reportRed = UIColor(red: 220 / 255, green: 40 / 255, blue: 40 / 255, alpha: 1)
+    /// Room for the red ring and for the "!" that sticks out of the top right corner.
+    private static let reportMargin: CGFloat = 13.5
+    /// The image of a dot is larger than the dot, so the dot can still be tapped.
+    private static let dotSide: CGFloat = 20
 
-    static func image(label: String, color: UIColor, flagged: Bool, elongated: Bool) -> UIImage {
+    /// A badge in the size `size` asks for: full (`.near`), small (`.mid`) or a dot
+    /// without a label (`.far`). A reported vehicle is always asked for in full size.
+    static func image(label: String, color: UIColor, flagged: Bool, elongated: Bool, size: BadgeTier) -> UIImage {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, al: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &al)
-        let key = "\(Int(r * 255))-\(Int(g * 255))-\(Int(b * 255))|\(label)|\(flagged)|\(elongated)"
+        let rgb = "\(Int(r * 255))-\(Int(g * 255))-\(Int(b * 255))"
+        // A dot shows no label, so all lines of one colour share one image.
+        let key = size == .far ? "dot|\(rgb)|\(elongated)" : "\(rgb)|\(label)|\(flagged)|\(elongated)|\(size.rawValue)"
         if let img = cache[key] { return img }
+        let img = size == .far
+            ? dot(color: color, elongated: elongated)
+            : badge(label: label, color: color, rgb: (r, g, b), flagged: flagged, elongated: elongated, small: size == .mid)
+        cache[key] = img
+        return img
+    }
 
+    private static func badge(label: String, color: UIColor, rgb: (CGFloat, CGFloat, CGFloat),
+                              flagged: Bool, elongated: Bool, small: Bool) -> UIImage {
         let text = String(label.prefix(elongated ? 5 : 4))
-        let font = UIFont.systemFont(ofSize: 9, weight: .bold)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-        let textSize = (text as NSString).size(withAttributes: attrs)
-        let height: CGFloat = 22
-        let padH: CGFloat = elongated ? 8 : 5
-        let shapeW = elongated ? max(textSize.width + 2 * padH, height * 1.6) : max(height, textSize.width + 2 * padH)
-        let margin: CGFloat = 3   // room for the "!" corner badge to overflow
+        let font = UIFont.systemFont(ofSize: small ? 7 : 9, weight: .bold)
+        let textSize = (text as NSString).size(withAttributes: [.font: font])
+        let height: CGFloat = small ? 16 : 22
+        let padH: CGFloat = elongated ? (small ? 5.5 : 8) : (small ? 2.5 : 3.5)
+        let shapeW = max(textSize.width + 2 * padH, elongated ? height * 1.6 : height)
+        // Room around the shape: for its outline, or for the ring and the "!" of a report.
+        let margin: CGFloat = flagged ? reportMargin : 3
         let size = CGSize(width: shapeW + 2 * margin, height: height + 2 * margin)
+        let corner: CGFloat = elongated ? height / 2 : (small ? 4.5 : 6)
+        let outline: CGFloat = small ? 1.2 : 1.5
 
-        let img = UIGraphicsImageRenderer(size: size).image { _ in
+        return UIGraphicsImageRenderer(size: size).image { _ in
             let rect = CGRect(x: margin, y: margin, width: shapeW, height: height)
-            let corner = elongated ? height / 2 : 6
             let path = UIBezierPath(roundedRect: rect, cornerRadius: corner)
             color.setFill(); path.fill()
-            UIColor.white.setStroke(); path.lineWidth = 1.5; path.stroke()
-            let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            UIColor.white.setStroke(); path.lineWidth = outline; path.stroke()
+            let luminance = 0.299 * rgb.0 + 0.587 * rgb.1 + 0.114 * rgb.2
             let textLabelColor: UIColor = luminance > 0.6 ? .black : .white   // same rule as `contrastingLabel`
             let drawAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textLabelColor]
             (text as NSString).draw(at: CGPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2),
                                     withAttributes: drawAttrs)
-            if flagged {
-                let br: CGFloat = 7
-                let circle = UIBezierPath(ovalIn: CGRect(x: size.width - 2 * br, y: 0, width: 2 * br, height: 2 * br))
-                UIColor(red: 220 / 255, green: 40 / 255, blue: 40 / 255, alpha: 1).setFill(); circle.fill()
-                UIColor.white.setStroke(); circle.lineWidth = 1.5; circle.stroke()
-                let bang = "!" as NSString
-                let bangAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 10, weight: .heavy),
-                                                               .foregroundColor: UIColor.white]
-                let bs = bang.size(withAttributes: bangAttrs)
-                bang.draw(at: CGPoint(x: size.width - br - bs.width / 2, y: br - bs.height / 2), withAttributes: bangAttrs)
-            }
+            guard flagged else { return }
+
+            // A red ring around the whole badge, just outside its white outline.
+            let ringWidth: CGFloat = 2.5
+            let out = outline / 2 + ringWidth / 2
+            let ring = UIBezierPath(roundedRect: rect.insetBy(dx: -out, dy: -out), cornerRadius: corner + out)
+            reportRed.setStroke(); ring.lineWidth = ringWidth; ring.stroke()
+
+            // The "!" on the top right corner, pushed outwards so it hides little of the label.
+            let br: CGFloat = 9
+            let centre = CGPoint(x: rect.maxX + 3, y: rect.minY - 3)
+            let circle = UIBezierPath(ovalIn: CGRect(x: centre.x - br, y: centre.y - br, width: 2 * br, height: 2 * br))
+            reportRed.setFill(); circle.fill()
+            UIColor.white.setStroke(); circle.lineWidth = 1.5; circle.stroke()
+            let bang = "!" as NSString
+            let bangAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 13, weight: .heavy),
+                                                           .foregroundColor: UIColor.white]
+            let bs = bang.size(withAttributes: bangAttrs)
+            bang.draw(at: CGPoint(x: centre.x - bs.width / 2, y: centre.y - bs.height / 2), withAttributes: bangAttrs)
         }
-        cache[key] = img
-        return img
+    }
+
+    /// A vehicle on a map that is zoomed far out: a dot in the line's colour, smaller
+    /// for bus and tram.
+    private static func dot(color: UIColor, elongated: Bool) -> UIImage {
+        let radius: CGFloat = elongated ? 3.5 : 5
+        return UIGraphicsImageRenderer(size: CGSize(width: dotSide, height: dotSide)).image { _ in
+            let rect = CGRect(x: dotSide / 2 - radius, y: dotSide / 2 - radius, width: 2 * radius, height: 2 * radius)
+            let path = UIBezierPath(ovalIn: rect)
+            color.setFill(); path.fill()
+            UIColor.white.setStroke(); path.lineWidth = 1.2; path.stroke()
+        }
     }
 }

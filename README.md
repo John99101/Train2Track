@@ -54,14 +54,14 @@ the server.
 
 | | |
 |---|---|
-| 🗺️ **Map** | Every vehicle in view moves along its route. Tap one to open it. |
-| 📋 **Feed** | All lines of a city as a live list, with search and filters for S-Bahn, U-Bahn, tram, bus and rail. |
-| ⏱️ **Delays** | Shown per journey where the data sources provide live data. Otherwise the journey is marked as scheduled. |
-| ⚠️ **Disruptions** | Notices from open data, for the selected city. |
-| 📣 **Reports** | "On board" marks a journey on which a ticket inspection is taking place. "Has left" ends it. Riders can also vote whether a journey is late. |
-| 🎫 **Ticket button** | Opens the ticket page of the local transport operator. |
-| 🎨 **Line colours** | Lines appear in the colours riders know from the network maps, where these are known. |
-| 🌗 **Look** | English and German, light and dark appearance. |
+| **Map** | Every vehicle in view moves along its route. Tap one to open it. |
+| **Feed** | All lines of a city as a live list, with search and filters for S-Bahn, U-Bahn, tram, bus and rail. |
+| **Delays** | Shown per journey where the data sources provide live data. Otherwise the journey is marked as scheduled. |
+| **Disruptions** | Notices from open data, for the selected city. |
+| **Reports** | "On board" marks a journey on which a ticket inspection is taking place. "Has left" ends it. Riders can also vote whether a journey is late. |
+| **Ticket button** | Opens the ticket page of the local transport operator. |
+| **Line colours** | Lines appear in the colours riders know from the network maps, where these are known. |
+| **Look** | English and German, light and dark appearance. |
 
 Cities: München, Berlin, Hamburg, Frankfurt, Nürnberg, Stuttgart, Köln, Düsseldorf and
 Dortmund, each with its surrounding area.
@@ -83,22 +83,22 @@ in spare time.
 
 What the code in this repository does, so that anyone can check it:
 
-- 👤 **No account.** Each installation signs in anonymously and gets a random
+- **No account.** Each installation signs in anonymously and gets a random
   identifier. There is no name, mail address or phone number anywhere.
-- 🔒 **Reports do not show who sent them.** A report is stored under a name that is a
+- **Reports do not show who sent them.** A report is stored under a name that is a
   hash of the identifier and the journey. It is different on every journey, so two
   reports of one rider cannot be linked by other apps. See
   [`functions/lib/reportIds.js`](functions/lib/reportIds.js) and
   [`firestore.rules`](firestore.rules).
-- 📍 **Location stays on the phone.** It only preselects the city and shows your
+- **Location stays on the phone.** It only preselects the city and shows your
   position on the map. It is never sent to the server.
-- ✋ **Nothing optional without consent.** Usage statistics are off until switched on
+- **Nothing optional without consent.** Usage statistics are off until switched on
   (Android only, iOS has none). At present the app shows no advertising. If it does
   later, no advertisement is requested before Google's consent dialog has been answered.
-- 🗑️ **Delete my data.** One button erases everything on the server that belongs to the
+- **Delete my data.** One button erases everything on the server that belongs to the
   identifier, and the app continues with a new one. Identifiers that are not used for
   30 days are removed by the server.
-- 📊 **Statistics without identifier.** The log of reported inspections holds line,
+- **Statistics without identifier.** The log of reported inspections holds line,
   station, journey, city and time only.
 
 ## How it works
@@ -313,4 +313,4 @@ lines belong to their owners and are used only to describe the service concerned
 The software comes without any warranty. Positions, delays, disruptions and reports can
 be late, incomplete or wrong.
 
-<p align="center"><sub>Built on open data and open source software. If you like it, leave a ⭐</sub></p>
+<p align="center"><sub>Built on open data and open source software.</sub></p>

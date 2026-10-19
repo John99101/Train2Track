@@ -66,12 +66,10 @@ struct LegalDocumentView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 4)
         } else if line.hasPrefix("• ") {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("•")
-                Text(String(line.dropFirst(2)))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: 8) {
+                Text("•").font(.callout)
+                ParagraphLabel(text: String(line.dropFirst(2)))
             }
-            .font(.callout)
             .padding(.top, 2)
         } else if prevBlank && !nextBlank && line.count <= 52
                     && !line.hasSuffix(".") && !line.hasSuffix(":") && !line.hasSuffix(",") {
@@ -80,9 +78,37 @@ struct LegalDocumentView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 2)
         } else {
-            Text(line)
-                .font(.callout)
+            ParagraphLabel(text: line)
                 .padding(.bottom, 2)
         }
+    }
+}
+
+/// A body paragraph or bullet text, drawn by UIKit. SwiftUI's `Text` cut off the
+/// end of some long paragraphs here ("… verspätet se…" in the German legal notice,
+/// iOS 26 and 27): it measured one line fewer than it then drew. A legal text must
+/// never lose words, and UILabel measures and draws the same way.
+private struct ParagraphLabel: UIViewRepresentable {
+    let text: String
+
+    func makeUIView(context: Context) -> UILabel {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        label.adjustsFontForContentSizeCategory = true
+        label.font = .preferredFont(forTextStyle: .callout)
+        label.textColor = .label
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    func updateUIView(_ label: UILabel, context: Context) {
+        label.text = text
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(fit.height))
     }
 }

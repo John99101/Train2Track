@@ -66,7 +66,7 @@ struct AdminScreen: View {
     @ViewBuilder private var liveUsers: some View {
         if let live = admin.liveStats {
             VStack(alignment: .leading, spacing: 2) {
-                Text(loc.t("admin_active_users", live.activeUsers)).font(.headline)
+                Text(loc.plural("admin_active_users", live.activeUsers)).font(.headline)
                 Text(loc.t("admin_active_users_split", live.android, live.ios))
                     .font(.caption).foregroundStyle(.secondary)
             }

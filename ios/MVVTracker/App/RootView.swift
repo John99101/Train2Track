@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 /// Light/dark preference, stored under the "theme_mode" AppStorage key (parallels
 /// Android's ThemeHelper). `.system` follows the device.
@@ -19,15 +20,64 @@ enum ThemeMode: String {
 /// `hasSeenTutorial`.
 struct RootFlow: View {
     @EnvironmentObject private var consent: ConsentStore
+    @ObservedObject private var gate = UpdateGate.shared
 
     var body: some View {
-        if !consent.hasSeenConsent {
-            ConsentScreen(onFinished: {})           // saveConsent flips the flag → re-renders
-        } else if !consent.hasSeenTutorial {
-            OnboardingScreen(onFinish: { consent.setTutorialSeen() })
-        } else {
-            MainTabs()
+        Group {
+            if gate.updateRequired {
+                UpdateRequiredView()                // a blocked version: only the way to update
+            } else if !consent.hasSeenConsent {
+                ConsentScreen(onFinished: {})       // saveConsent flips the flag → re-renders
+            } else if !consent.hasSeenTutorial {
+                OnboardingScreen(onFinish: { consent.setTutorialSeen() })
+            } else {
+                MainTabs()
+            }
         }
+        .onAppear { gate.check() }
+    }
+}
+
+/// The oldest build that may still be used. The owner sets it in the Firebase
+/// console (Firestore, document config/app, number field iosMinBuild) when a
+/// released version has a serious fault; that version then asks for an update.
+/// No document, no field or no connection: nothing is blocked. Checked once per
+/// start. Port of Android's `MinVersionCheck`.
+@MainActor
+final class UpdateGate: ObservableObject {
+    static let shared = UpdateGate()
+    @Published private(set) var updateRequired = false
+    private var checked = false
+
+    func check() {
+        guard !checked else { return }
+        checked = true
+        Firestore.firestore().collection("config").document("app").getDocument { [weak self] snap, _ in
+            let min = (snap?.get("iosMinBuild") as? NSNumber)?.intValue ?? 0
+            let build = Int(AppInfo.buildNumber) ?? Int.max
+            Task { @MainActor in self?.updateRequired = build < min }
+        }
+    }
+}
+
+/// Shown instead of the app when this version may no longer be used. Port of
+/// Android's `UpdateRequiredScreen`.
+struct UpdateRequiredView: View {
+    @EnvironmentObject private var loc: LocalizationManager
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text(loc.t("update_title"))
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+            Text(loc.t("update_body"))
+                .multilineTextAlignment(.center)
+            Button(loc.t("update_button")) { openURL(AppInfo.updateURL) }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 8)
+        }
+        .padding(32)
     }
 }
 

@@ -37,3 +37,15 @@ internal fun lineWidthDp(tier: ZoomTier): Float = when (tier) {
     ZoomTier.MID -> 2.5f
     ZoomTier.NEAR -> 3f
 }
+
+/**
+ * The colour of a line name written on [background]: black on light colours (a
+ * yellow line), white otherwise. The same rule as iOS (`contrastingLabel`).
+ */
+internal fun labelColorOn(background: Int): Int {
+    val r = (background shr 16) and 0xFF
+    val g = (background shr 8) and 0xFF
+    val b = background and 0xFF
+    val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    return if (luminance > 0.6) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+}

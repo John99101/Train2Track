@@ -4,6 +4,11 @@
  * Each city's region is centre ± HALF_LAT / HALF_LON degrees, large enough to
  * cover the whole S-Bahn network around the city (e.g. Munich to Freising,
  * Tutzing, Erding), same as the Feed's city box in the app.
+ *
+ * A city with hidden: true is prepared for a later release: its live data can be
+ * asked for (for testing), but the apps do not show it yet and the weekly route
+ * job leaves it out. To make it public, remove the flag here and move it from
+ * HIDDEN_CITIES to GERMAN_CITIES in both apps.
  */
 const HALF_LAT = 0.35;
 const HALF_LON = 0.5;
@@ -18,6 +23,8 @@ const CITIES = {
   koeln: { name: "Köln", lat: 50.9375, lon: 6.9603 },
   duesseldorf: { name: "Düsseldorf", lat: 51.2277, lon: 6.7735 },
   dortmund: { name: "Dortmund", lat: 51.5136, lon: 7.4653 },
+  leipzig: { name: "Leipzig", lat: 51.3397, lon: 12.3731, hidden: true },
+  hannover: { name: "Hannover", lat: 52.3759, lon: 9.732, hidden: true },
 };
 
 /** Bounding box of a city's region as transitous min/max ("lat,lon") strings. */

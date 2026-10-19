@@ -89,6 +89,13 @@ struct FeedScreen: View {
 
     private var reportsOnly: Bool { modeFilters.contains(.reports) }
 
+    /// The modes to download: those of the selected filters, nil (every mode) for
+    /// "All" and "Current reports".
+    private var feedMotisModes: Set<String>? {
+        let modes = Set(modeFilters.compactMap(\.motisMode))
+        return modes.isEmpty ? nil : modes
+    }
+
     /// Changing a filter jumps back to the top of the list.
     private var filterSignature: String {
         "\(modeFilters.map(\.rawValue).sorted())|\(selectedLine ?? "")|\(query)"
@@ -111,6 +118,7 @@ struct FeedScreen: View {
             .navigationTitle(loc.t("nav_feed"))
             .safeAreaInset(edge: .bottom) { adSlot }
             .onAppear {
+                live.showModes(feedMotisModes)
                 live.onAppear()
                 // Only the reports of this city (and the cities overlapping it).
                 reports.start(cities: reportScope(for: selectedCity))
@@ -126,6 +134,7 @@ struct FeedScreen: View {
                 live.showCity(city)
                 reports.start(cities: reportScope(for: city))
             }
+            .onChange(of: feedMotisModes) { _, modes in live.showModes(modes) }
             .sheet(item: $selectedTrain) {
                 // Every train in the Feed belongs to the selected city.
                 ReportScreen(train: $0, ticketURL: selectedCity.ticketURL, reportCity: selectedCity.id,
@@ -336,8 +345,8 @@ struct FeedScreen: View {
         if !suTrains.isEmpty {
             // Our server is unreachable (the app asks the source directly, less
             // often) or serves an older snapshot: say so instead of "live".
-            return loc.t(live.dataDelayed ? "feed_trains_delayed" : "feed_trains_live",
-                         suTrains.count, selectedCity.name)
+            return loc.plural(live.dataDelayed ? "feed_trains_delayed" : "feed_trains_live",
+                              suTrains.count, selectedCity.name)
         } else if live.loadError {
             return loc.t("feed_unavailable")
         } else if reportsOnly && !live.trains.isEmpty {
@@ -425,7 +434,7 @@ private struct TrainRow: View {
                     DelayBadge(delayMinutes: train.delayMinutes, isRealtime: train.isRealtime)
                         .environmentObject(loc)
                     if delayConfirmCount > 0 {
-                        Text(loc.t("delay_confirmed_count", delayConfirmCount))
+                        Text(loc.plural("delay_confirmed_count", delayConfirmCount))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -466,7 +475,7 @@ private struct DisruptionsBanner: View {
             Button { expanded.toggle() } label: {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                    Text(loc.t("disruptions_banner", disruptions.count)).fontWeight(.semibold)
+                    Text(loc.plural("disruptions_banner", disruptions.count)).fontWeight(.semibold)
                     Spacer()
                     Text(loc.t(expanded ? "disruptions_hide" : "disruptions_show")).font(.caption)
                 }

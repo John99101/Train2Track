@@ -3,30 +3,35 @@
  * Android app). Points are [lat, lon] pairs.
  */
 
+/**
+ * A damaged string (cut off in the middle of a value, or not a polyline at all)
+ * gives the points decoded up to that place, like the apps.
+ */
 function decode(encoded, precision = 5) {
   const factor = Math.pow(10, precision);
   const points = [];
   let index = 0;
   let lat = 0;
   let lng = 0;
-  while (index < encoded.length) {
+  // The next value, or null when the string ends before the value does.
+  const nextValue = () => {
     let shift = 0;
     let result = 0;
     let b;
     do {
+      if (index >= encoded.length || shift > 30) return null;
       b = encoded.charCodeAt(index++) - 63;
       result |= (b & 0x1f) << shift;
       shift += 5;
     } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    return result & 1 ? ~(result >> 1) : result >> 1;
+  };
+  while (index < encoded.length) {
+    const dLat = nextValue();
+    const dLng = dLat === null ? null : nextValue();
+    if (dLng === null) break;
+    lat += dLat;
+    lng += dLng;
     points.push([lat / factor, lng / factor]);
   }
   return points;

@@ -20,6 +20,9 @@ final class OwnReportsStore: ObservableObject {
     private init() {
         let saved = UserDefaults.standard.dictionary(forKey: key) as? [String: NSNumber] ?? [:]
         startedAt = saved.mapValues(\.int64Value)
+        // Remove what expired while the app was closed, so nothing older than the
+        // report lifetime stays on the device.
+        save()
     }
 
     /// "On board": one active report per device per train (an earlier one is replaced).

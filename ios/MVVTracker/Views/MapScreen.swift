@@ -24,10 +24,15 @@ struct MapScreen: View {
         return Set(MapMode.allCases.filter { names.contains($0.rawValue) })
     }
 
+    /// The MOTIS modes on the map, nil when every category is on.
+    private var shownModes: Set<String>? {
+        if selectedModes.count == MapMode.allCases.count { return nil }
+        return selectedModes.reduce(into: Set<String>()) { $0.formUnion($1.motisModes) }
+    }
+
     /// Trains after the on-map mode filter (all shown when every category is on).
     private var shownTrains: [TrainPosition] {
-        if selectedModes.count == MapMode.allCases.count { return vm.trains }
-        let modes = selectedModes.reduce(into: Set<String>()) { $0.formUnion($1.motisModes) }
+        guard let modes = shownModes else { return vm.trains }
         return vm.trains.filter { modes.contains($0.mode) }
     }
 
@@ -55,6 +60,8 @@ struct MapScreen: View {
             .navigationTitle(loc.t("nav_map"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
+                // Download only the vehicles of these modes (rail alone by default).
+                vm.showModes(shownModes)
                 vm.onAppear()
                 // Only the reports of what the map shows (set once the area is known).
                 reports.start(cities: vm.reportCities)
@@ -67,6 +74,7 @@ struct MapScreen: View {
             .onDisappear { vm.onDisappear(); reports.stop() }
             // Fetch full routes only for the lines currently shown (map driven).
             .onChange(of: shownRouteKeys) { _, keys in vm.ensureRoutes(keys) }
+            .onChange(of: shownModes) { _, modes in vm.showModes(modes) }
             .onChange(of: vm.reportCities) { _, cities in reports.start(cities: cities) }
             .sheet(item: $selected) { train in
                 ReportScreen(train: train, ticketURL: citySelection.city.ticketURL,
@@ -87,8 +95,8 @@ struct MapScreen: View {
         if vm.loadError && shownTrains.isEmpty { return loc.t("feed_unavailable") }
         if shownTrains.isEmpty { return loc.t("map_loading") }
         // Our server is unreachable or serves an older snapshot.
-        if vm.dataDelayed { return loc.t("map_trains_delayed", shownTrains.count) }
-        return loc.t("map_trains_live", shownTrains.count)
+        if vm.dataDelayed { return loc.plural("map_trains_delayed", shownTrains.count) }
+        return loc.plural("map_trains_live", shownTrains.count)
     }
 
     /// Top-right filter: toggle which modes appear on the map. The menu stays open

@@ -5,8 +5,10 @@
 
 /* Feed */
 "feed_city" = "Stadt";
-"feed_trains_live" = "%1$d Fahrzeuge live in %2$@";
-"feed_trains_delayed" = "%1$d Fahrzeuge in %2$@ · Livedaten verzögert";
+"feed_trains_live_one" = "%1$d Fahrzeug live in %2$@";
+"feed_trains_live_other" = "%1$d Fahrzeuge live in %2$@";
+"feed_trains_delayed_one" = "%1$d Fahrzeug in %2$@ · Livedaten verzögert";
+"feed_trains_delayed_other" = "%1$d Fahrzeuge in %2$@ · Livedaten verzögert";
 "feed_unavailable" = "Livedaten nicht verfügbar, erneuter Versuch…";
 "feed_looking" = "Suche nach Fahrzeugen in %1$@…";
 "label_sbahn" = "S-Bahn";
@@ -21,13 +23,20 @@
 "feed_search_hint" = "Linie oder Station suchen";
 
 /* Karte */
-"map_trains_live" = "%1$d Bahnen live · Karte bewegen zum Erkunden";
-"map_trains_delayed" = "%1$d Bahnen · Livedaten verzögert";
+"map_trains_live_one" = "%1$d Bahn live · Karte bewegen zum Erkunden";
+"map_trains_live_other" = "%1$d Bahnen live · Karte bewegen zum Erkunden";
+"map_trains_delayed_one" = "%1$d Bahn · Livedaten verzögert";
+"map_trains_delayed_other" = "%1$d Bahnen · Livedaten verzögert";
 "map_other_rail" = "Bahn";
 
 /* Werbung */
 "ad_label" = "Anzeige";
 "ad_skip" = "Anzeige überspringen";
+"ad_open" = "Öffnen";
+"settings_version" = "Version %1$@ (%2$@)";
+"update_title" = "Bitte aktualisiere Train2Track";
+"update_body" = "Diese Version funktioniert nicht mehr richtig. Die neueste Version wartet im App Store auf dich.";
+"update_button" = "Jetzt aktualisieren";
 
 /* Melden */
 "report_title" = "Melden";
@@ -53,8 +62,10 @@
 "delay_vote_no" = "Pünktlich";
 "delay_vote_thanks_late" = "Danke! Du hast diesen Zug als verspätet gemeldet.";
 "delay_vote_thanks_on_time" = "Danke! Du hast diesen Zug als pünktlich gemeldet.";
-"delay_confirmed_count" = "%d bestätigen Verspätung";
-"disruptions_banner" = "%d aktuelle Störung(en)";
+"delay_confirmed_count_one" = "%d bestätigt Verspätung";
+"delay_confirmed_count_other" = "%d bestätigen Verspätung";
+"disruptions_banner_one" = "%d aktuelle Störung";
+"disruptions_banner_other" = "%d aktuelle Störungen";
 "disruptions_show" = "Anzeigen";
 "disruptions_hide" = "Ausblenden";
 "report_submitting" = "Wird gesendet…";
@@ -77,7 +88,7 @@
 
 /* Einwilligung */
 "consent_title" = "Bevor du startest";
-"consent_intro" = "Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Option unten ist aus, bis du sie einschaltest. Zur Werbung fragt dich Google in einem eigenen Dialog. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.";
+"consent_intro" = "Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Option unten ist aus, bis du sie einschaltest. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.";
 "consent_location_title" = "Standort";
 "consent_location_desc" = "Wählt deine Stadt vor und zeigt deine Position auf der Karte. Dein Standort bleibt auf deinem Gerät.";
 "consent_continue" = "Weiter";
@@ -106,7 +117,7 @@
 "about_title" = "Datenquellen und Open Source";
 "about_intro" = "Train2Track nutzt offene Daten. Die Anbieter sind für die App nicht verantwortlich.";
 "about_transit_title" = "Fahrplan und Live Daten";
-"about_transit_body" = "Transitous, ein offener Routingdienst, den Freiwillige betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.";
+"about_transit_body" = "Transitous, ein offener Routingdienst, den Freiwillige mit der freien Software MOTIS betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.";
 "about_disruptions_title" = "Störungsmeldungen";
 "about_disruptions_body" = "gtfs.de, unter der Lizenz CC BY SA 4.0.";
 "about_map_title" = "Karte";
@@ -143,7 +154,8 @@
 "admin_state_dismissed" = "Verworfen";
 "admin_state_throttled" = "%1$d durch das Spamlimit blockiert";
 "admin_action_failed" = "Aktion fehlgeschlagen: %1$@";
-"admin_active_users" = "%1$d aktive Nutzer";
+"admin_active_users_one" = "%1$d aktiver Nutzer";
+"admin_active_users_other" = "%1$d aktive Nutzer";
 "admin_active_users_split" = "Android %1$d · iOS %2$d · letzte 10 Minuten";
 "admin_active_users_unknown" = "Aktive Nutzer: noch keine Daten";
 "admin_stats_title" = "Kontrollstatistik (letzte 30 Tage)";

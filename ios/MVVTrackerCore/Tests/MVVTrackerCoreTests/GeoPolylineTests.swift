@@ -20,6 +20,23 @@ final class GeoPolylineTests: XCTestCase {
         XCTAssertTrue(GeoPolyline.decode("").isEmpty)
     }
 
+    /// A damaged string must not crash: it gives the points before the damage.
+    func testDecodeCutOffStringKeepsTheCompletePoints() {
+        // The canonical example cut off in the middle of the third longitude.
+        let points = GeoPolyline.decode("_p~iF~ps|U_ulLnnqC_mqNvx")
+        XCTAssertEqual(points.count, 2)
+        XCTAssertEqual(points[1].lat, 40.7, accuracy: 1e-6)
+        XCTAssertEqual(points[1].lon, -120.95, accuracy: 1e-6)
+        XCTAssertTrue(GeoPolyline.decode("_p~iF").isEmpty)   // a latitude without its longitude
+        XCTAssertTrue(GeoPolyline.decode("~").isEmpty)       // a value that never ends
+    }
+
+    func testDecodeGarbageDoesNotCrash() {
+        _ = GeoPolyline.decode(String(repeating: "~", count: 500))
+        _ = GeoPolyline.decode(String(repeating: "?~", count: 500))
+        _ = GeoPolyline.decode("ü€ \u{0}\n")
+    }
+
     func testPointAtFractionEndpoints() {
         let pts = [GeoPoint(0, 0), GeoPoint(0, 10)]
         XCTAssertEqual(GeoPolyline.pointAtFraction(pts, 0.0), GeoPoint(0, 0))

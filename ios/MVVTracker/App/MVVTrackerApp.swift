@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseCore
 import FirebaseAuth
 import FirebaseAppCheck
+import Network
 
 /// Registers Firebase at launch and establishes the anonymous identity the
 /// reports backend keys off of. Uses the AppDelegate adaptor pattern from the
@@ -28,14 +29,46 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // id goes away ("delete my data", or the server removed an id that was unused
         // for a long time), so the app always gets a fresh id by itself.
         authHandle = Auth.auth().addStateDidChangeListener { [weak self] auth, user in
-            guard let self, user == nil, !self.signingIn else { return }
-            self.signingIn = true
-            auth.signInAnonymously { [weak self] _, _ in self?.signingIn = false }
+            guard user == nil else { return }
+            self?.signIn(auth)
         }
+        // A first start without internet: sign in as soon as a connection is there.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            DispatchQueue.main.async {
+                self?.retryDelay = Self.firstRetry
+                self?.signIn(Auth.auth())
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "train2track.network"))
         // Google Mobile Ads is NOT started here: it only starts once the user
         // answered Google's consent dialog (see AdsManager).
         return true
     }
+
+    /// Signs in when there is no id; when that fails (no connection, the server
+    /// was busy), tries again after 15 s, then less often. Port of Android's
+    /// `MvvTrackerApp.signIn`.
+    private func signIn(_ auth: Auth) {
+        guard auth.currentUser == nil, !signingIn else { return }
+        signingIn = true
+        auth.signInAnonymously { [weak self] _, error in
+            guard let self else { return }
+            self.signingIn = false
+            guard error != nil else {
+                self.retryDelay = Self.firstRetry
+                return
+            }
+            let delay = self.retryDelay
+            self.retryDelay = min(self.retryDelay * 2, Self.maxRetry)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.signIn(auth) }
+        }
+    }
+
+    private let pathMonitor = NWPathMonitor()
+    private var retryDelay: TimeInterval = AppDelegate.firstRetry
+    private static let firstRetry: TimeInterval = 15
+    private static let maxRetry: TimeInterval = 300
 }
 
 @main

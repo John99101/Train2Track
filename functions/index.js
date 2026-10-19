@@ -19,8 +19,9 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten, onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions, logger } = require("firebase-functions/v2");
 const crypto = require("crypto");
-const admin = require("firebase-admin");
-const { FieldValue, Timestamp } = require("firebase-admin/firestore");
+const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const GtfsRealtimeBindings = require("gtfs-realtime-bindings");
 const { CITIES } = require("./lib/cities");
 const { createApi, rebuildCityRoutes } = require("./lib/liveApi");
@@ -30,9 +31,9 @@ const { ADMIN_UIDS, syncAdminClaims } = require("./lib/admins");
 const { tripKey, legacyDocId, hiddenDocId, ownerNoteId, ownerOf } = require("./lib/reportIds");
 const { ENFORCE_APP_CHECK, LIMITS, DISMISSAL_STICKY_MS } = require("./lib/limits");
 
-admin.initializeApp();
+initializeApp();
 setGlobalOptions({ region: "europe-west3" });
-const db = admin.firestore();
+const db = getFirestore();
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -84,7 +85,7 @@ exports.api = onRequest(
  */
 async function refreshAllRoutes({ full }) {
   const result = {};
-  for (const city of Object.keys(CITIES)) {
+  for (const city of Object.keys(CITIES).filter((c) => !CITIES[c].hidden)) {
     try {
       const { rows, asked } = await rebuildCityRoutes(db, city, { full });
       result[city] = { lines: rows.length, asked };
@@ -455,7 +456,7 @@ exports.liveStats = onSchedule({ schedule: "every 5 minutes", timeoutSeconds: 60
  * lose their id here.
  */
 exports.cleanup = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 300 }, async () => {
-  await syncAdminClaims(admin.auth(), logger);
+  await syncAdminClaims(getAuth(), logger);
   const ago = (ms) => Timestamp.fromMillis(Date.now() - ms);
   const n = {
     presence: await deleteWhere(db.collection("presence").where("lastSeen", "<", ago(HOUR))),
@@ -516,7 +517,7 @@ async function eraseUser(uid) {
   }
   await Promise.all(["presence", "rate_limits", "users"].map((c) => db.collection(c).doc(uid).delete()));
   try {
-    await admin.auth().deleteUser(uid);
+    await getAuth().deleteUser(uid);
   } catch (e) {
     logger.warn(`eraseUser: could not delete auth user: ${e.message}`);
   }
@@ -532,7 +533,11 @@ exports.deleteMyData = onCall({ ...CALLABLE, timeoutSeconds: 120 }, async (reque
 });
 
 const INACTIVE_DAYS = 30;
-const PURGE_MAX_PER_RUN = 300;
+// Up to this many ids a day, a few at a time, and only as long as the time allows
+// (the function may run 9 minutes). What is left is removed the next day.
+const PURGE_MAX_PER_RUN = 3000;
+const PURGE_PARALLEL = 4;
+const PURGE_BUDGET_MS = 7 * MINUTE;
 
 /**
  * Daily: remove anonymous ids nobody has used for 30 days, with everything tied
@@ -547,7 +552,7 @@ exports.purgeInactiveUsers = onSchedule(
     let total = 0;
     let pageToken;
     do {
-      const page = await admin.auth().listUsers(1000, pageToken);
+      const page = await getAuth().listUsers(1000, pageToken);
       total += page.users.length;
       for (const user of page.users) {
         if (ADMIN_UIDS.includes(user.uid)) continue;
@@ -558,7 +563,12 @@ exports.purgeInactiveUsers = onSchedule(
       pageToken = page.pageToken;
     } while (pageToken);
 
-    for (const uid of stale) await eraseUser(uid);
-    logger.info(`purgeInactiveUsers: ${total} ids, removed ${stale.length} unused for ${INACTIVE_DAYS} days`);
+    let removed = 0;
+    while (removed < stale.length && Date.now() - now < PURGE_BUDGET_MS) {
+      const next = stale.slice(removed, removed + PURGE_PARALLEL);
+      await Promise.all(next.map((uid) => eraseUser(uid)));
+      removed += next.length;
+    }
+    logger.info(`purgeInactiveUsers: ${total} ids, removed ${removed} of ${stale.length} unused for ${INACTIVE_DAYS} days`);
   }
 );

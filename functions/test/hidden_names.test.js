@@ -100,12 +100,21 @@ async function eventually(what, check, timeoutMs = 30000) {
     await sleep(300);
   }
 }
+/** An unsigned App Check token, as the emulators accept it (the apps send a real one). */
+function appCheckToken() {
+  const now = Math.floor(Date.now() / 1000);
+  return `${b64({ alg: "none", typ: "JWT" })}.${b64({
+    iss: "https://firebaseappcheck.googleapis.com/000000000000", sub: "1:000000000000:android:test",
+    aud: [`projects/${PROJECT}`], iat: now, exp: now + 3600,
+  })}.`;
+}
+async function post(auth, name, data = {}, appCheck = true) {
+  const headers = { authorization: `Bearer ${auth}`, "content-type": "application/json" };
+  if (appCheck) headers["x-firebase-appcheck"] = appCheckToken();
+  return fetch(`${FUNCTIONS}/${name}`, { method: "POST", headers, body: JSON.stringify({ data }) });
+}
 async function call(auth, name, data = {}) {
-  const res = await fetch(`${FUNCTIONS}/${name}`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${auth}`, "content-type": "application/json" },
-    body: JSON.stringify({ data }),
-  });
+  const res = await post(auth, name, data);
   const json = await res.json();
   if (!res.ok) throw new Error(`${name}: ${JSON.stringify(json)}`);
   return json.result;
@@ -157,6 +166,15 @@ async function test(name, fn) {
   });
   await test("rules: a free name is refused", async () => {
     assert.strictEqual(await write(token(A), `reports/anything${run}`, { ...hiddenReport(A, trip(1)), uid: `anything${run}` }), false);
+  });
+  await test("rules: a made up journey number is refused", async () => {
+    const D = `riderD${run}`;
+    const madeUp = `just some text ${run}`;
+    assert.strictEqual(await writeHidden(token(D), "reports", D, hiddenReport(D, madeUp)), false);
+    assert.strictEqual(await writeHidden(token(D), "delay_reports", D, vote(D, madeUp, true)), false);
+    const log = (tripId) => ({ tripId, line: "S8", station: "Ostbahnhof", city: "muenchen" });
+    assert.strictEqual(await commit(token(D), [{ path: `control_log/x${run}`, data: log(madeUp), stamp: true }]), false);
+    assert.strictEqual(await commit(token(D), [{ path: `control_log/y${run}`, data: log(trip(1)), stamp: true }]), true);
   });
   await test("rules: no app can read or forge the owner notes", async () => {
     assert.strictEqual(await read(token(A), `doc_owners/reports__${hiddenDocId(A, trip(1))}`), "denied");
@@ -239,6 +257,10 @@ async function test(name, fn) {
     // The same rider reports the same journey again: it stays hidden.
     assert.strictEqual(await writeHidden(token(A), "reports", A, hiddenReport(A, trip(1))), true);
     await eventually("dismissed again", async () => ((await read(ADMIN, `reports/${hiddenDocId(A, trip(1))}`)) || {}).dismissed === true);
+  });
+  await test("server: a call without App Check is refused", async () => {
+    const res = await post(token(`riderE${run}`), "deleteMyData", {}, false);
+    assert.strictEqual(res.status, 401, `HTTP ${res.status}`);
   });
   await test("delete my data: removes hidden entries and their notes", async () => {
     await call(token(B), "deleteMyData");

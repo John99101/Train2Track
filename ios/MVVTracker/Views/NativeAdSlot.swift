@@ -80,14 +80,11 @@ struct NativeAdSlot: View {
             if elapsed < skipAfter { elapsed = min(elapsed + 0.1, skipAfter) }
         }
         // Like Android: ads start once the choice is made, and a changed choice
-        // replaces the ad that is shown.
-        .onChange(of: ads.canRequestAds) { _, allowed in
+        // replaces the ad that is shown. One handler for both values (they change
+        // together when the dialog closes), so only one ad is requested.
+        .onChange(of: AdChoice(allowed: ads.canRequestAds, version: ads.choiceVersion)) { _, choice in
             elapsed = 0
-            if allowed { loader.load() } else { loader.clear() }
-        }
-        .onChange(of: ads.choiceVersion) { _, _ in
-            elapsed = 0
-            if ads.canRequestAds { loader.reload() } else { loader.clear() }
+            if choice.allowed { loader.reload() } else { loader.clear() }
         }
         .onChange(of: hidden) { _, isHidden in
             guard isHidden else { return }
@@ -105,7 +102,7 @@ struct NativeAdSlot: View {
     /// an empty `Group` would not appear, so the load would never run.
     @ViewBuilder private var content: some View {
         if !hidden, let ad = loader.nativeAd {
-            NativeAdContainer(nativeAd: ad)
+            NativeAdContainer(nativeAd: ad, openText: loc.t("ad_open"))
                 .frame(height: 140)
                 .padding(10)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -140,11 +137,19 @@ struct NativeAdSlot: View {
     }
 }
 
+/// Whether ads may be requested, and which answer of the consent dialog that is.
+private struct AdChoice: Equatable {
+    let allowed: Bool
+    let version: Int
+}
+
 /// Hosts a `NativeAdView` with a media view + headline / body / call-to-action,
 /// bound to the ad. Using `MediaView` for the main asset satisfies the AdMob
 /// native-ad policy (the validator flags an ImageView used in its place).
 private struct NativeAdContainer: UIViewRepresentable {
     let nativeAd: NativeAd
+    /// The button text when the ad brings none ("Open" / "Öffnen").
+    let openText: String
 
     func makeUIView(context: Context) -> NativeAdView {
         let adView = NativeAdView()
@@ -215,7 +220,7 @@ private struct NativeAdContainer: UIViewRepresentable {
     func updateUIView(_ adView: NativeAdView, context: Context) {
         (adView.headlineView as? UILabel)?.text = nativeAd.headline
         (adView.bodyView as? UILabel)?.text = nativeAd.body
-        (adView.callToActionView as? UILabel)?.text = "  " + (nativeAd.callToAction ?? "Open") + "  "
+        (adView.callToActionView as? UILabel)?.text = "  " + (nativeAd.callToAction ?? openText) + "  "
         (adView.mediaView)?.mediaContent = nativeAd.mediaContent
         adView.nativeAd = nativeAd
     }

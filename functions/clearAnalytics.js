@@ -10,11 +10,12 @@
  *   node clearAnalytics.js            # deletes ALL control_log docs
  *   node clearAnalytics.js --count    # just prints how many are there
  */
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 const serviceAccount = require("./serviceAccountKey.json");
 
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db = admin.firestore();
+initializeApp({ credential: cert(serviceAccount) });
+const db = getFirestore();
 
 const COLLECTION = "control_log";
 const BATCH = 400;

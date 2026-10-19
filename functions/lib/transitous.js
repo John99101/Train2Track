@@ -10,6 +10,9 @@
  */
 const crypto = require("crypto");
 const { CITIES, cityBox } = require("./cities");
+// Line colours where the timetable data has none, from the public domain table of
+// Träwelling (built by tools/build_line_colors.js).
+const LINE_COLORS = require("./lineColors.json");
 const polyline = require("./polyline");
 const { version } = require("../package.json");
 
@@ -24,13 +27,21 @@ const SHOWN_MODES = new Set([
   "METRO", "SUBWAY", "TRAM", "BUS", "REGIONAL_RAIL", "REGIONAL_FAST_RAIL",
   "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL",
 ]);
-// Long distance routes cross the whole country and share one label ("ICE"), so
-// the per city route set only covers the local networks.
+// Long distance routes cross the whole country and share one label ("ICE"): one
+// stored line would be drawn for every ICE, mostly wrong. So route lines exist
+// only for the local networks, in the set and on demand; long distance trains
+// still move along their own track (shapes).
 const ROUTE_MODES = new Set([
   "METRO", "SUBWAY", "TRAM", "BUS", "REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "RAIL",
 ]);
 
 const LIVE_WINDOW = { from: -60, to: 180 };   // seconds around "now"
+// The live window moves in steps of this size instead of with every request: two
+// requests in the same step ask transitous the same question, so the answer only
+// changes when real time data changes, and the apps get "nothing new" (304) more
+// often. A step longer than the 20 second map refresh lets about two of three
+// refreshes fall into the same step. The window then reaches 180 to 240 seconds ahead.
+const LIVE_STEP_MS = 60 * 1000;
 const SHAPE_WINDOWS = [600, 300, 180];        // widest first; transitous caps the trip count
 const ROUTE_TOLERANCE_DEG = 0.00003;          // ~3 m, same as the app
 
@@ -63,6 +74,14 @@ async function mapTrips(cityId, fromS, toS, nowMs = Date.now()) {
 /** Stable short key for a track geometry (the apps cache geometries by it). */
 function shapeKey(encoded) {
   return crypto.createHash("sha1").update(encoded).digest("base64url").slice(0, 12);
+}
+
+/** The colour of a line: from the timetable data, else from the line colour table, else "". */
+function lineColor(cityId, seg, label) {
+  const own = (seg.routeColor || "").replace(/^#/, "");
+  if (own) return own;
+  const table = cityId && LINE_COLORS[cityId];
+  return (table && table[`${seg.mode}|${label}`]) || "";
 }
 
 function labelOf(seg) {
@@ -107,7 +126,7 @@ function compactLive(cityId, segs, nowMs = Date.now()) {
     const arrMs = Date.parse(seg.arrival);
     if (!(arrMs > depMs)) continue;
     const label = labelOf(seg);
-    const color = (seg.routeColor || "").replace(/^#/, "");
+    const color = lineColor(cityId, seg, label);
     const lk = `${label}|${seg.mode}|${color}`;
     let li = lineIdx.get(lk);
     if (li === undefined) {
@@ -135,7 +154,8 @@ function compactLive(cityId, segs, nowMs = Date.now()) {
 
 /** Live snapshot for a city, straight from transitous. */
 async function fetchLive(cityId, nowMs = Date.now()) {
-  const segs = await mapTrips(cityId, LIVE_WINDOW.from, LIVE_WINDOW.to, nowMs);
+  const step = Math.floor(nowMs / LIVE_STEP_MS) * LIVE_STEP_MS;
+  const segs = await mapTrips(cityId, LIVE_WINDOW.from, LIVE_WINDOW.to + LIVE_STEP_MS / 1000, step);
   return compactLive(cityId, segs, nowMs);
 }
 
@@ -209,7 +229,7 @@ async function tripRoute(tripId) {
  */
 async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full = false } = {}) {
   const segs = await mapTrips(cityId, LIVE_WINDOW.from, LIVE_WINDOW.to);
-  const merged = new Map(previous.map((row) => [`${row[1]}|${row[0]}`, row]));
+  const merged = new Map(previous.filter((row) => ROUTE_MODES.has(row[1])).map((row) => [`${row[1]}|${row[0]}`, row]));
   const reps = new Map();   // "mode|label" -> { label, mode, color, tripId }
   for (const seg of segs) {
     if (!ROUTE_MODES.has(seg.mode)) continue;
@@ -218,7 +238,7 @@ async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full 
     const label = labelOf(seg);
     const key = `${seg.mode}|${label}`;
     if (reps.has(key) || (!full && merged.has(key))) continue;
-    reps.set(key, { label, mode: seg.mode, color: (seg.routeColor || "").replace(/^#/, ""), tripId });
+    reps.set(key, { label, mode: seg.mode, color: lineColor(cityId, seg, label), tripId });
   }
   const todo = [...reps.values()];
   const polys = await mapLimit(todo, 8, (r) =>
@@ -231,6 +251,6 @@ async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full 
 }
 
 module.exports = {
-  CITIES, SHOWN_MODES, USER_AGENT, LIVE_WINDOW,
-  shapeKey, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, mapTrips,
+  CITIES, SHOWN_MODES, ROUTE_MODES, USER_AGENT, LIVE_WINDOW, LIVE_STEP_MS,
+  shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, mapTrips,
 };

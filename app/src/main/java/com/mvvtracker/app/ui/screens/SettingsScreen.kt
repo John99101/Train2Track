@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.mvvtracker.app.BuildConfig
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mvvtracker.app.R
 import com.mvvtracker.app.util.AppInfo
@@ -172,6 +173,14 @@ fun SettingsScreen(
             stringResource(R.string.settings_delete_desc),
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(top = 6.dp)
+        )
+
+        // Which version is installed: helps when someone reports a problem.
+        Text(
+            stringResource(R.string.settings_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 24.dp)
         )
     }
 }

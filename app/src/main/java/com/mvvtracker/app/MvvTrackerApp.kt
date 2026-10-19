@@ -2,6 +2,10 @@ package com.mvvtracker.app
 
 import android.app.Application
 import android.app.NotificationManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.os.Handler
+import android.os.Looper
 import androidx.work.WorkManager
 import com.google.firebase.auth.FirebaseAuth
 import com.mvvtracker.app.privacy.AnalyticsSwitch
@@ -53,17 +57,40 @@ class MvvTrackerApp : Application() {
      * identity for dedup/rate-limiting - no name or email required (GDPR).
      */
     private fun ensureAnonymousSignIn() {
+        val auth = FirebaseAuth.getInstance()
         // The listener fires right away with the current state and again whenever the
         // id goes away ("delete my data", or the server removed an id that was unused
         // for a long time), so the app always gets a fresh id by itself.
-        FirebaseAuth.getInstance().addAuthStateListener { auth ->
-            if (auth.currentUser == null && signingIn.compareAndSet(false, true)) {
-                auth.signInAnonymously().addOnCompleteListener { signingIn.set(false) }
+        auth.addAuthStateListener { signIn(it) }
+        // A first start without internet: sign in as soon as a connection is there.
+        getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    retryDelayMs = FIRST_RETRY_MS
+                    signIn(auth)
+                }
+            }
+        )
+    }
+
+    /** Signs in when there is no id; when that fails, tries again a little later. */
+    private fun signIn(auth: FirebaseAuth) {
+        if (auth.currentUser != null || !signingIn.compareAndSet(false, true)) return
+        auth.signInAnonymously().addOnCompleteListener { task ->
+            signingIn.set(false)
+            if (task.isSuccessful) {
+                retryDelayMs = FIRST_RETRY_MS
+            } else {
+                // No connection or the server was busy: again after 15 s, then less often.
+                retryHandler.postDelayed({ signIn(auth) }, retryDelayMs)
+                retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
             }
         }
     }
 
     private val signingIn = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val retryHandler = Handler(Looper.getMainLooper())
+    @Volatile private var retryDelayMs = FIRST_RETRY_MS
 
     /**
      * OpenStreetMap tile servers reject the default HTTP user-agent and ask apps
@@ -100,5 +127,7 @@ class MvvTrackerApp : Application() {
         const val OLD_BACKGROUND_JOB = "feed_poll_worker"
         val OLD_NOTIFICATION_CHANNELS = listOf("channel_disruptions", "channel_resolved", "channel_general")
         val OLD_MESSAGING_STORES = listOf("com.google.firebase.messaging", "com.google.android.gms.appid")
+        const val FIRST_RETRY_MS = 15_000L
+        const val MAX_RETRY_MS = 5 * 60_000L
     }
 }

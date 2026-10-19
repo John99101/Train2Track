@@ -8,7 +8,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Path
 import java.time.Instant
 
@@ -18,8 +20,20 @@ import java.time.Instant
  * ~1.2 MB raw transitous response every device used to download every 30 s.
  */
 interface LiveApiService {
+    /** The whole city (a server not updated yet knows only this one). */
     @GET("api/live/{city}")
     suspend fun live(@Path("city") cityId: String): LiveSnapshotDto
+
+    /**
+     * One [LiveGroup] of the city. With the ETag of the data the app already has in
+     * [etag], the server answers 304 (no body) as long as nothing changed.
+     */
+    @GET("api/live/{city}/{group}")
+    suspend fun liveGroup(
+        @Path("city") cityId: String,
+        @Path("group") group: String,
+        @Header("If-None-Match") etag: String?
+    ): Response<LiveSnapshotDto>
 
     @GET("api/shapes/{city}")
     suspend fun shapes(@Path("city") cityId: String): ShapesDto

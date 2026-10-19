@@ -178,7 +178,7 @@ private fun bindNativeAd(adView: NativeAdView, ad: NativeAd) {
 
     val ctaText = ad.callToAction
     if (ctaText.isNullOrBlank()) {
-        cta.text = "Open"
+        cta.text = adView.context.getString(R.string.ad_open)
     } else {
         cta.text = ctaText
         adView.callToActionView = cta

@@ -2,6 +2,7 @@ package com.mvvtracker.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mvvtracker.app.data.live.LiveGroup
 import com.mvvtracker.app.data.live.LiveSegment
 import com.mvvtracker.app.data.live.LiveTripsRepository
 import com.mvvtracker.app.data.live.RouteStore
@@ -97,6 +98,8 @@ class LiveMapViewModel @Inject constructor(
     /** The map's visible area; markers outside it (plus a margin) are not built. */
     private val viewport = MutableStateFlow<Bounds?>(null)
     private val active = MutableStateFlow(true)
+    /** The groups the screen shows (see [showModes]); null until it said so. */
+    private val groups = MutableStateFlow<Set<LiveGroup>?>(null)
     /** The Feed only lists vehicles, it needs no positions (and fewer ticks). */
     @Volatile private var positionsWanted = true
 
@@ -148,10 +151,11 @@ class LiveMapViewModel @Inject constructor(
         // while the screen is on (see pause): pausing cancels the loop, resuming
         // starts it again and fetches at once if the last snapshot is too old.
         viewModelScope.launch {
-            combine(source, active) { src, on -> if (on) src else null }
+            combine(source, active, groups) { src, on, g -> if (on && src != null && g != null) src to g else null }
                 .distinctUntilChanged()
-                .collectLatest { src ->
-                    if (src == null) return@collectLatest
+                .collectLatest { request ->
+                    if (request == null) return@collectLatest
+                    val (src, shown) = request
                     // Load the reports of what is on screen (and of nothing else).
                     reportScope.show(src.reportCities())
                     // Only the map draws routes; the Feed's list does not need them.
@@ -161,7 +165,7 @@ class LiveMapViewModel @Inject constructor(
                     if (src is Source.Box) delay(BOX_SETTLE_MILLIS)
                     while (isActive) {
                         val waitMs = try {
-                            val snap = fetch(src)
+                            val snap = fetch(src, shown)
                             live = Live(snap.segments, (src as? Source.City)?.city?.id)
                             _loadError.value = false
                             _dataDelayed.value = snap.delayed
@@ -212,6 +216,12 @@ class LiveMapViewModel @Inject constructor(
         source.value = Source.City(city)
     }
 
+    /**
+     * Which modes the screen shows (null = all). Only their groups are downloaded;
+     * switching one on loads it at once.
+     */
+    fun showModes(modes: Set<String>?) { groups.value = LiveGroup.forModes(modes) }
+
     /** Called when the screen becomes visible (and the app is in the foreground): resume fetching/updating. */
     fun resume() { active.value = true; wake.trySend(Unit) }
 
@@ -221,9 +231,12 @@ class LiveMapViewModel @Inject constructor(
     /** The map refreshes every 20 s; the Feed's list does not need that and saves a third of the data. */
     private fun cityIntervalMs() = if (positionsWanted) FETCH_CITY_MILLIS else FETCH_FEED_MILLIS
 
-    private suspend fun fetch(src: Source): LiveTripsRepository.Snapshot = when (src) {
-        is Source.City -> liveTrips.cityTrips(src.city, maxAgeMs = cityIntervalMs() - 2_000)
-        is Source.Box -> liveTrips.boxTrips(src.area())
+    private suspend fun fetch(src: Source, shown: Set<LiveGroup>): LiveTripsRepository.Snapshot = when (src) {
+        is Source.City -> liveTrips.cityTrips(src.city, shown, maxAgeMs = cityIntervalMs() - 2_000)
+        // transitous directly has every mode in one answer.
+        is Source.Box ->
+            if (shown.isEmpty()) LiveTripsRepository.Snapshot(emptyList(), System.currentTimeMillis(), stale = false)
+            else liveTrips.boxTrips(src.area())
     }
 
     private fun Source.Box.area() =
@@ -305,13 +318,13 @@ class LiveMapViewModel @Inject constructor(
         _routes.value = emptyMap()
         if (src !is Source.City) return
         // Saved routes first (instant), then the server set if the saved one is old.
-        routeByKey.putAll(routeStore.cached(scope))
+        routeByKey.putAll(routeStore.cached(scope).filterKeys(::hasRouteLine))
         publishRoutes()
         viewModelScope.launch {
             val fresh = routeStore.refreshIfStale(scope)
             if (routeScope != scope) return@launch
             if (fresh != null) {
-                routeByKey.putAll(fresh)
+                routeByKey.putAll(fresh.filterKeys(::hasRouteLine))
                 publishRoutes()
             }
             // Only now is it known which lines the set lacks.
@@ -339,6 +352,7 @@ class LiveMapViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val reps = LinkedHashMap<String, LiveSegment>()   // key -> a vehicle on that line
         for (key in keys) {
+            if (!hasRouteLine(key)) continue
             if (routeByKey.containsKey(key) || key in routeInFlight || reps.containsKey(key)) continue
             if (now < (routeRetryAtMs[key] ?: 0L)) continue
             val seg = segs.firstOrNull { it.tripId != null && routeKey(it.mode, it.label) == key } ?: continue
@@ -384,6 +398,16 @@ class LiveMapViewModel @Inject constructor(
         const val MAX_SPAN_DEGREES = 1.2
         const val VIEWPORT_MARGIN = 0.25     // build markers a bit beyond the screen edge
         const val ROUTE_RETRY_MILLIS = 5 * 60_000L         // a line without a route is asked again after this
+
+        /**
+         * Modes that get a route line (ROUTE_MODES on the server). Long distance
+         * trains all share one name ("ICE"), so one stored line would be wrong for
+         * most of them: they move along their own track without a line.
+         */
+        val ROUTE_MODES = setOf("METRO", "SUBWAY", "TRAM", "BUS", "REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "RAIL")
+
+        /** True for the [routeKey] of a line that may have a route line. */
+        fun hasRouteLine(key: String) = key.substringBefore('|') in ROUTE_MODES
 
         // Modes we surface in the app. Rail rapid transit + regional/long-distance,
         // plus (Phase 3) buses and trams.

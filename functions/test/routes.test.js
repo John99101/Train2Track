@@ -157,49 +157,63 @@ async function test(name, fn) {
     assert.deepStrictEqual(r.body.route.slice(0, 2), ["S1", "METRO"]);
     assert.strictEqual(asked.length, 0);
   });
-  await test("one line on demand: a long distance line is fetched once and stored", async () => {
+  await test("one line on demand: a long distance train gets no route, nothing is asked or stored", async () => {
     const r = await call(api, routeUrl("muenchen", "HIGHSPEED_RAIL", "ICE", "trip_ICE"));
+    assert.strictEqual(r.code, 404);
+    assert.strictEqual(trips().length, 0);
+    assert.ok(!(await loadStoredRoutes(db, "muenchen")).routes.some((row) => row[0] === "ICE"));
+  });
+  await test("one line on demand: a local line the set lacks is fetched once and stored", async () => {
+    running.push(segment("TRAM", "27", "trip_27"));
+    const r = await call(api, routeUrl("muenchen", "TRAM", "27", "trip_27"));
     assert.strictEqual(r.code, 200);
-    assert.deepStrictEqual(r.body.route.slice(0, 3), ["ICE", "HIGHSPEED_RAIL", "0099cc"]);
+    assert.deepStrictEqual(r.body.route.slice(0, 3), ["27", "TRAM", "0099cc"]);
     assert.ok(polyline.decode(r.body.route[3], 5).length >= 2);
-    assert.deepStrictEqual(trips().map((a) => a.tripId), ["trip_ICE"]);
-    assert.ok((await loadStoredRoutes(db, "muenchen")).routes.some((row) => row[0] === "ICE"));
+    assert.deepStrictEqual(trips().map((a) => a.tripId), ["trip_27"]);
+    assert.ok((await loadStoredRoutes(db, "muenchen")).routes.some((row) => row[0] === "27"));
   });
   await test("one line on demand: the next phone gets it without a request to transitous", async () => {
-    const r = await call(api, routeUrl("muenchen", "HIGHSPEED_RAIL", "ICE", "another_trip"));
+    const r = await call(api, routeUrl("muenchen", "TRAM", "27", "another_trip"));
     assert.strictEqual(r.code, 200);
     assert.strictEqual(asked.length, 0);
   });
   await test("one line on demand: another server instance finds the stored line", async () => {
     const other = createApi({ db, logger });
-    const r = await call(other, routeUrl("muenchen", "HIGHSPEED_RAIL", "ICE", "trip_ICE"));
+    const r = await call(other, routeUrl("muenchen", "TRAM", "27", "trip_27"));
     assert.strictEqual(r.code, 200);
     assert.strictEqual(trips().length, 0);
   });
   await test("one line on demand: a journey that is not running is refused without asking for it", async () => {
     const r = await call(api, routeUrl("muenchen", "BUS", "X99", "invented_trip"));
     assert.strictEqual(r.code, 404);
-    const wrongLine = await call(api, routeUrl("muenchen", "BUS", "X99", "trip_ICE"));
+    const wrongLine = await call(api, routeUrl("muenchen", "BUS", "X99", "trip_27"));
     assert.strictEqual(wrongLine.code, 404);
     assert.strictEqual(trips().length, 0);
     assert.ok(!(await loadStoredRoutes(db, "muenchen")).routes.some((row) => row[0] === "X99"));
   });
   await test("one line on demand: many phones at once cause one request", async () => {
-    running.push(segment("NIGHT_RAIL", "NJ 420", "trip_NJ"));
+    running.push(segment("BUS", "N40", "trip_N40"));
     const fresh = createApi({ db, logger });
     const answers = await Promise.all(
-      Array.from({ length: 12 }, () => call(fresh, routeUrl("muenchen", "NIGHT_RAIL", "NJ", "trip_NJ"))));
+      Array.from({ length: 12 }, () => call(fresh, routeUrl("muenchen", "BUS", "N40", "trip_N40"))));
     assert.ok(answers.every((a) => a.code === 200));
     assert.strictEqual(trips().length, 1);
   });
   await test("one line on demand: a route that cannot be built is not asked for again at once", async () => {
-    running.push(segment("LONG_DISTANCE", "IC 2", "trip_IC"));
-    failTrips = new Set(["trip_IC"]);
+    running.push(segment("REGIONAL_RAIL", "RB 99", "trip_RB99"));
+    failTrips = new Set(["trip_RB99"]);
     const fresh = createApi({ db, logger });
-    assert.strictEqual((await call(fresh, routeUrl("muenchen", "LONG_DISTANCE", "IC", "trip_IC"))).code, 404);
-    assert.strictEqual((await call(fresh, routeUrl("muenchen", "LONG_DISTANCE", "IC", "trip_IC"))).code, 404);
+    assert.strictEqual((await call(fresh, routeUrl("muenchen", "REGIONAL_RAIL", "RB", "trip_RB99"))).code, 404);
+    assert.strictEqual((await call(fresh, routeUrl("muenchen", "REGIONAL_RAIL", "RB", "trip_RB99"))).code, 404);
     assert.strictEqual(trips().length, 1);
     failTrips = new Set();
+  });
+  await test("long distance lines stored by earlier versions are left out", async () => {
+    const poly = polyline.encode([[53.5, 10.0], [53.6, 10.1]], 5);
+    db.docs.set("route_cache/hamburg", { v: 1, built: Date.now(), count: 2, chunks: 1, complete: true });
+    db.docs.set("route_cache/hamburg/chunks/0", { rows: JSON.stringify([["ICE", "HIGHSPEED_RAIL", "", poly], ["S1", "METRO", "", poly]]) });
+    const routes = (await loadStoredRoutes(db, "hamburg")).routes;
+    assert.deepStrictEqual(routes.map((r) => r[0]), ["S1"]);
   });
   await test("one line on demand: unknown city, unknown mode and overlong values are refused", async () => {
     assert.strictEqual((await call(api, routeUrl("atlantis", "BUS", "100", "trip_100"))).code, 404);

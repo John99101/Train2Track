@@ -1,7 +1,11 @@
 /**
  * The apps' live data API, served through Firebase Hosting (rewrite /api/**):
  *
- *   GET /api/live/{city}    compact live snapshot      CDN cached ~20 s
+ *   GET /api/live/{city}    compact live snapshot      CDN cached ~20 s (app versions up to 0.5.1)
+ *   GET /api/live/{city}/{group}
+ *                           the same for one mode group (rail, tram, bus, see
+ *                           liveGroups.js), with an ETag: a request with a matching
+ *                           If-None-Match gets "304 Not Modified" without a body
  *   GET /api/shapes/{city}  track geometries by key    CDN cached 10 min
  *   GET /api/routes/{city}  full line routes           CDN cached 6 h
  *   GET /api/route/{city}/{mode}/{label}/{tripId}
@@ -16,6 +20,7 @@
  */
 const zlib = require("zlib");
 const T = require("./transitous");
+const { GROUPS, splitLive, liveHash } = require("./liveGroups");
 const { CITIES } = require("./cities");
 
 const LIVE_TTL_MS = 15 * 1000;
@@ -84,6 +89,15 @@ function send(req, res, entry, cacheControl, status = 200) {
   }
 }
 
+/** True when an If-None-Match header names the ETag of [hash] (weak or strong, or "*"). */
+function etagMatches(header, hash) {
+  if (!header) return false;
+  return header.split(",").some((tag) => {
+    const t = tag.trim();
+    return t === "*" || t.replace(/^W\//, "") === `"${hash}"`;
+  });
+}
+
 function sendError(res, status, error) {
   res.set("Cache-Control", CC_ERROR);
   res.status(status).json({ error });
@@ -100,7 +114,10 @@ async function loadStoredRoutes(db, city) {
   chunks.docs
     .sort((a, b) => Number(a.id) - Number(b.id))
     .forEach((d) => rows.push(...JSON.parse(d.get("rows") || "[]")));
-  return { built: meta.get("built") || 0, complete: meta.get("complete") !== false, routes: rows };
+  // Long distance lines stored by earlier versions are left out (see ROUTE_MODES);
+  // the next save of the set drops them for good.
+  const local = rows.filter((r) => T.ROUTE_MODES.has(r[1]));
+  return { built: meta.get("built") || 0, complete: meta.get("complete") !== false, routes: local };
 }
 
 /** [built] = when the set was last built or topped up as a whole (not: one line added). */
@@ -151,18 +168,54 @@ function createApi({ db, logger }) {
   const shapes = new Cache();
   const routes = new Cache();
 
-  async function handleLive(req, res, city) {
+  /** The city's whole snapshot and its cache time; the last good one, flagged stale, when transitous fails. */
+  async function liveSnapshot(city) {
     try {
-      const e = await live.load(city, LIVE_TTL_MS, () => T.fetchLive(city));
-      return send(req, res, e, CC_LIVE);
+      return { entry: await live.load(city, LIVE_TTL_MS, () => T.fetchLive(city)), cacheControl: CC_LIVE };
     } catch (err) {
       const last = live.get(city);
       if (last && Date.now() - last.at < LIVE_STALE_MAX_MS) {
         logger.warn(`live ${city}: serving stale snapshot (${err.message})`);
-        return send(req, res, new Entry({ ...last.obj, stale: true }), CC_STALE);
+        return { entry: new Entry({ ...last.obj, stale: true }), cacheControl: CC_STALE };
       }
       throw err;
     }
+  }
+
+  async function handleLive(req, res, city) {
+    const { entry, cacheControl } = await liveSnapshot(city);
+    return send(req, res, entry, cacheControl);
+  }
+
+  // One snapshot per city and group that only changes when its content changes
+  // (same base time, same bytes), so its ETag stays the same and an app that has
+  // it gets "not modified".
+  const groupSplits = new WeakMap();   // whole snapshot Entry -> its groups
+  const groupLatest = new Map();       // "city|group" -> { hash, entry }
+
+  async function handleLiveGroup(req, res, city, group) {
+    const { entry, cacheControl } = await liveSnapshot(city);
+    let groups = groupSplits.get(entry);
+    if (!groups) {
+      groups = splitLive(entry.obj);
+      groupSplits.set(entry, groups);
+    }
+    const obj = groups[group];
+    const key = `${city}|${group}`;
+    const hash = liveHash(obj);
+    let latest = groupLatest.get(key);
+    if (!latest || latest.hash !== hash) {
+      latest = { hash, entry: new Entry(obj) };
+      groupLatest.set(key, latest);
+    }
+    const etag = `W/"${hash}"`;
+    res.set("ETag", etag);
+    if (etagMatches(req.get("if-none-match"), hash)) {
+      res.set("Cache-Control", cacheControl);
+      res.set("Vary", "Accept-Encoding");
+      return res.status(304).end();
+    }
+    return send(req, res, latest.entry, cacheControl);
   }
 
   async function handleShapes(req, res, city) {
@@ -240,7 +293,8 @@ function createApi({ db, logger }) {
   }
 
   async function handleRoute(req, res, city, mode, label, trip) {
-    const valid = T.SHOWN_MODES.has(mode) && label && label.length <= 40 && trip && trip.length <= 300;
+    // Only local lines have routes (see ROUTE_MODES); a long distance train gets 404.
+    const valid = T.ROUTE_MODES.has(mode) && label && label.length <= 40 && trip && trip.length <= 300;
     const row = valid ? await lineRoute(city, mode, label, trip) : null;
     if (!row) {
       res.set("Cache-Control", CC_ROUTE_MISS);
@@ -263,9 +317,13 @@ function createApi({ db, logger }) {
       return sendError(res, 404, "not_found");
     }
     const [kind, city] = parts;
-    if (parts.length !== (kind === "route" ? 5 : 2)) return sendError(res, 404, "not_found");
+    const group = kind === "live" && parts.length === 3 ? parts[2] : null;
+    const expected = kind === "route" ? 5 : group !== null ? 3 : 2;
+    if (parts.length !== expected) return sendError(res, 404, "not_found");
+    if (group !== null && !GROUPS.includes(group)) return sendError(res, 404, "not_found");
     if (!CITIES[city]) return sendError(res, 404, "unknown_city");
     try {
+      if (kind === "live" && group !== null) return await handleLiveGroup(req, res, city, group);
       if (kind === "live") return await handleLive(req, res, city);
       if (kind === "shapes") return await handleShapes(req, res, city);
       if (kind === "routes") return await handleRoutes(req, res, city);
@@ -278,4 +336,4 @@ function createApi({ db, logger }) {
   };
 }
 
-module.exports = { createApi, rebuildCityRoutes, loadStoredRoutes };
+module.exports = { createApi, rebuildCityRoutes, loadStoredRoutes, etagMatches };

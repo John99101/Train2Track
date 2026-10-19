@@ -6,6 +6,10 @@ import MVVTrackerCore
 /// `LiveTripsRepository`:
 ///  - a city goes through the Train2Track server first (one compact snapshot for
 ///    everyone); geometries come separately and are kept in `ShapeStore`;
+///  - only the `LiveGroup`s on screen are loaded, each with the ETag of the data
+///    the app has: as long as nothing changed the server answers 304 and the app
+///    keeps what it has. A server not updated yet answers 404 to these paths; then
+///    the whole city is loaded as before;
 ///  - if the server is unreachable the app asks transitous directly, but gently:
 ///    at most once every two minutes per city (`FallbackPacer`), so thousands of
 ///    phones do not hit the community server every 20 s when ours is down. Such a
@@ -39,7 +43,19 @@ actor LiveTripsRepository {
     private let transitous: TransportApi = TransportApiClient()
     private let shapes = ShapeStore.shared
 
+    /// One group of a city as the server last sent it, and when it was last asked.
+    private struct GroupData {
+        let segments: [LiveSegment]
+        let etag: String?
+        let stale: Bool
+        let checkedAtMs: Int64
+    }
+
+    /// A whole city: from a server not updated yet, or from transitous directly.
     private var cityCache: [String: Snapshot] = [:]
+    private var groupCache: [String: GroupData] = [:]   // key "city|group"
+    /// The server answered 404 to the group paths: load whole cities until then.
+    private var groupPathsRetryAtMs: Int64 = 0
     private var inFlight: [String: Task<Snapshot, Error>] = [:]
     private var lastShapesFetch: [String: Int64] = [:]
     private var pacer = FallbackPacer()
@@ -56,23 +72,48 @@ actor LiveTripsRepository {
     private static let boxMargin = 0.15
     private static let boxMinHalfLat = 0.15
     private static let boxMinHalfLon = 0.22
+    /// After a 404 to the group paths, they are tried again this much later.
+    private static let groupPathsRetryMs: Int64 = 10 * 60_000
     private static let shapesMinIntervalMs: Int64 = 10 * 60_000
     private static let shapesRetryMs: Int64 = 60_000
 
-    /// The city's vehicles, from cache when younger than `maxAgeMs`.
-    func cityTrips(_ city: GermanCity, maxAgeMs: Int64) async throws -> Snapshot {
-        if let c = cityCache[city.id], nowMs() - c.fetchedAtMs < maxAgeMs { return c }
-        if let running = inFlight[city.id] { return try await running.value }
+    /// The city's vehicles of `groups`, from cache when younger than `maxAgeMs`.
+    func cityTrips(_ city: GermanCity, groups: Set<LiveGroup>, maxAgeMs: Int64) async throws -> Snapshot {
+        if groups.isEmpty { return Snapshot(segments: [], fetchedAtMs: nowMs(), stale: false) }
+        if let s = fresh(city.id, groups: groups, maxAgeMs: maxAgeMs) { return s }
+        let key = city.id + "|" + LiveGroup.allCases.filter(groups.contains).map(\.rawValue).joined(separator: ",")
+        if let running = inFlight[key] { return try await running.value }
         let task = Task { () throws -> Snapshot in
             self.shapes.loadCity(city.id)
-            if let s = await self.viaServer(city) { return s }
+            if let s = await self.viaServer(city, groups: groups, maxAgeMs: maxAgeMs) { return s }
             return try await self.fallback(city)
         }
-        inFlight[city.id] = task
-        defer { inFlight[city.id] = nil }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
         let snap = try await task.value
-        cityCache[city.id] = snap
+        if snap.viaFallback { cityCache[city.id] = snap }
         return snap
+    }
+
+    /// A whole city snapshot (it has every group), or else all `groups` young enough.
+    private func fresh(_ cityId: String, groups: Set<LiveGroup>, maxAgeMs: Int64) -> Snapshot? {
+        let now = nowMs()
+        if let c = cityCache[cityId], now - c.fetchedAtMs < maxAgeMs { return c }
+        var parts: [LiveGroup: GroupData] = [:]
+        for g in groups {
+            guard let d = groupCache[Self.groupKey(cityId, g)], now - d.checkedAtMs < maxAgeMs else { return nil }
+            parts[g] = d
+        }
+        return Self.merged(parts)
+    }
+
+    private static func groupKey(_ cityId: String, _ group: LiveGroup) -> String { "\(cityId)|\(group.rawValue)" }
+
+    /// The groups as one snapshot, always in the same order (rail, tram, bus).
+    private static func merged(_ parts: [LiveGroup: GroupData]) -> Snapshot {
+        Snapshot(segments: LiveGroup.merged(parts.mapValues(\.segments)),
+                 fetchedAtMs: parts.values.map(\.checkedAtMs).min() ?? 0,
+                 stale: parts.values.contains { $0.stale })
     }
 
     /// Vehicles for a free map view (outside the supported cities): always direct.
@@ -105,17 +146,76 @@ actor LiveTripsRepository {
     }
 
     /// nil when the server may not be asked right now, or did not answer properly.
-    private func viaServer(_ city: GermanCity) async -> Snapshot? {
+    private func viaServer(_ city: GermanCity, groups: Set<LiveGroup>, maxAgeMs: Int64) async -> Snapshot? {
         if !pacer.serverAllowed(nowMs: nowMs()) { return nil }
         do {
-            let snap = try await live.live(city.id)
-            if snap.segments.contains(where: { !$0.shapeKey.isEmpty && !shapes.contains($0.shapeKey) }) {
-                requestShapes(city.id)
+            if nowMs() >= groupPathsRetryAtMs,
+               let snap = try await byGroups(city, groups: groups, maxAgeMs: maxAgeMs) {
+                cityCache[city.id] = nil
+                return snap
             }
-            return Snapshot(segments: snap.segments, fetchedAtMs: nowMs(), stale: snap.stale)
+            // A server not updated yet: the whole city in one snapshot.
+            let snap = try await live.live(city.id)
+            requestShapesIfMissing(city.id, snap.segments)
+            let whole = Snapshot(segments: snap.segments, fetchedAtMs: nowMs(), stale: snap.stale)
+            cityCache[city.id] = whole
+            return whole
         } catch {
             pacer.onServerFailure(nowMs: nowMs(), deviceOffline: Self.isNoConnection(error))
             return nil
+        }
+    }
+
+    /// Asks the server for every group in `groups` that is older than `maxAgeMs`, at
+    /// the same time. nil when the server does not know the group paths yet.
+    private func byGroups(_ city: GermanCity, groups: Set<LiveGroup>, maxAgeMs: Int64) async throws -> Snapshot? {
+        let now = nowMs()
+        let due = LiveGroup.allCases.filter { g in
+            guard groups.contains(g) else { return false }
+            guard let d = groupCache[Self.groupKey(city.id, g)] else { return true }
+            return now - d.checkedAtMs >= maxAgeMs
+        }
+        let etags: [LiveGroup: String] = due.reduce(into: [:]) { out, g in
+            out[g] = groupCache[Self.groupKey(city.id, g)]?.etag
+        }
+        let api = live
+        let cityId = city.id
+        let answers = try await withThrowingTaskGroup(of: (LiveGroup, LiveApiClient.GroupAnswer).self) { tasks in
+            for g in due {
+                let etag = etags[g]
+                tasks.addTask {
+                    let answer = try await api.liveGroup(cityId, group: g, etag: etag)
+                    return (g, answer)
+                }
+            }
+            var out: [(LiveGroup, LiveApiClient.GroupAnswer)] = []
+            for try await answer in tasks { out.append(answer) }
+            return out
+        }
+        let checked = nowMs()
+        for (g, answer) in answers {
+            let key = Self.groupKey(city.id, g)
+            switch answer {
+            case .unknownPath:
+                groupPathsRetryAtMs = checked + Self.groupPathsRetryMs
+                return nil
+            case .notModified:
+                // Nothing new: keep the vehicles, they keep moving along their tracks.
+                guard let old = groupCache[key] else { throw URLError(.badServerResponse) }
+                groupCache[key] = GroupData(segments: old.segments, etag: old.etag, stale: old.stale, checkedAtMs: checked)
+            case .data(let snap, let etag):
+                requestShapesIfMissing(city.id, snap.segments)
+                groupCache[key] = GroupData(segments: snap.segments, etag: etag, stale: snap.stale, checkedAtMs: checked)
+            }
+        }
+        var parts: [LiveGroup: GroupData] = [:]
+        for g in groups { parts[g] = groupCache[Self.groupKey(city.id, g)] }
+        return Self.merged(parts)
+    }
+
+    private func requestShapesIfMissing(_ cityId: String, _ segments: [LiveSegment]) {
+        if segments.contains(where: { !$0.shapeKey.isEmpty && !shapes.contains($0.shapeKey) }) {
+            requestShapes(cityId)
         }
     }
 

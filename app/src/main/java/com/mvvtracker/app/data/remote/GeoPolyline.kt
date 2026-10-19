@@ -74,6 +74,11 @@ object GeoPolyline {
      * Returns the polyline points as [latitude, longitude] pairs. [precision] is the
      * number of decimal digits the coordinates were encoded with: MOTIS map/trips
      * segments use 5, while /api/v1/trip leg geometry uses 7.
+     *
+     * A damaged string (cut off in the middle of a value, or not a polyline at all)
+     * gives the points decoded up to that place instead of crashing: the strings come
+     * from the network and are kept on the device, so one bad string would otherwise
+     * crash the app at every start. Same as GeoPolyline.swift on iOS.
      */
     fun decode(encoded: String, precision: Int = 5): List<DoubleArray> {
         val factor = Math.pow(10.0, precision.toDouble())
@@ -81,26 +86,27 @@ object GeoPolyline {
         var index = 0
         var lat = 0
         var lng = 0
-        while (index < encoded.length) {
+
+        // The next value, or null when the string ends before the value does (or a
+        // value runs on longer than any real coordinate can).
+        fun nextValue(): Int? {
             var shift = 0
             var result = 0
             var b: Int
             do {
+                if (index >= encoded.length || shift > 30) return null
                 b = encoded[index++].code - 63
                 result = result or ((b and 0x1f) shl shift)
                 shift += 5
             } while (b >= 0x20)
-            lat += if (result and 1 != 0) (result shr 1).inv() else result shr 1
+            return if (result and 1 != 0) (result shr 1).inv() else result shr 1
+        }
 
-            shift = 0
-            result = 0
-            do {
-                b = encoded[index++].code - 63
-                result = result or ((b and 0x1f) shl shift)
-                shift += 5
-            } while (b >= 0x20)
-            lng += if (result and 1 != 0) (result shr 1).inv() else result shr 1
-
+        while (index < encoded.length) {
+            val dLat = nextValue() ?: break
+            val dLng = nextValue() ?: break
+            lat += dLat
+            lng += dLng
             points.add(doubleArrayOf(lat / factor, lng / factor))
         }
         return points

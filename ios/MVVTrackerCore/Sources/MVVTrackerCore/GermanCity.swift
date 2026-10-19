@@ -55,6 +55,15 @@ public let germanCities: [GermanCity] = [
     GermanCity(id: "dortmund", name: "Dortmund", latitude: 51.5136, longitude: 7.4653, ticketURL: "https://www.bus-und-bahn.de/tickets")
 ]
 
+/// Cities prepared for a later release and not shown anywhere yet: nothing in the
+/// app reads this list. To make one public, move it into `germanCities` (Android:
+/// HIDDEN_CITIES to GERMAN_CITIES) and remove hidden: true in functions/lib/cities.js.
+/// The server and firestore.rules already know both ids. Mirror of `HIDDEN_CITIES`.
+public let hiddenCities: [GermanCity] = [
+    GermanCity(id: "leipzig", name: "Leipzig", latitude: 51.3397, longitude: 12.3731, ticketURL: "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
+    GermanCity(id: "hannover", name: "Hannover", latitude: 52.3759, longitude: 9.7320, ticketURL: "https://www.uestra.de/fahrkarten-preise/")
+]
+
 /// The supported city whose region fully contains the box, preferring the one whose
 /// centre is closest to the box centre (regions overlap in the Ruhr area); nil when
 /// the box is outside every region (or bigger than one). Port of `cityForBox`.

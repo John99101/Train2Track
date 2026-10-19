@@ -12,9 +12,44 @@ struct LiveApiClient {
 
     init(session: URLSession = .shared) { self.session = session }
 
-    /// `GET /api/live/{city}`. Fails fast so the app can fall back to transitous.
+    /// `GET /api/live/{city}`, the whole city (a server not updated yet knows only
+    /// this one). Fails fast so the app can fall back to transitous.
     func live(_ cityId: String) async throws -> LiveSnapshot {
         try LiveSnapshot.parse(try await get("live/\(cityId)", timeout: 15))
+    }
+
+    /// What `liveGroup` got back.
+    enum GroupAnswer: Sendable {
+        /// New data and its ETag.
+        case data(LiveSnapshot, etag: String?)
+        /// 304: nothing changed since the data with the ETag that was sent.
+        case notModified
+        /// 404: a server not updated yet knows only the whole city (`live`).
+        case unknownPath
+    }
+
+    /// `GET /api/live/{city}/{group}`: one `LiveGroup` of the city. With the ETag of
+    /// the data the app already has, the server answers 304 as long as nothing
+    /// changed. Done by hand, not through `URLCache` (it silently skips large
+    /// answers), so both apps behave the same. Port of Android's `liveGroup`.
+    func liveGroup(_ cityId: String, group: LiveGroup, etag: String?) async throws -> GroupAnswer {
+        var request = URLRequest(url: Self.baseURL.appendingPathComponent("live/\(cityId)/\(group.rawValue)"))
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        switch http.statusCode {
+        case 304:
+            return .notModified
+        case 404:
+            return .unknownPath
+        case 200...299:
+            return .data(try LiveSnapshot.parse(data), etag: http.value(forHTTPHeaderField: "ETag"))
+        default:
+            throw URLError(.badServerResponse)
+        }
     }
 
     /// `GET /api/shapes/{city}` → key → encoded polyline.

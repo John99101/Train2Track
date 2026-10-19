@@ -266,3 +266,14 @@ public enum LivePositions {
 
 /// Map key of a line route: mode and label, so bus "100" and tram "100" never mix.
 public func routeKey(mode: String, label: String) -> String { "\(mode)|\(label)" }
+
+/// Modes that get a route line (ROUTE_MODES on the server). Long distance trains
+/// all share one name ("ICE"), so one stored line would be wrong for most of
+/// them: they move along their own track without a line. Mirror of Android's
+/// `LiveMapViewModel.ROUTE_MODES`.
+public let routeModes: Set<String> = ["METRO", "SUBWAY", "TRAM", "BUS", "REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "RAIL"]
+
+/// True for the `routeKey` of a line that may have a route line.
+public func hasRouteLine(_ key: String) -> Bool {
+    routeModes.contains(String(key.prefix { $0 != "|" }))
+}

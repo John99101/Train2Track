@@ -40,6 +40,8 @@ final class LiveMapViewModel: ObservableObject {
     private var positionsWanted = true
     private var segments: [LiveSegment] = []
     private var active = false
+    /// The groups the screen shows (see `showModes`); nil until it said so.
+    private var groups: Set<LiveGroup>?
 
     private var fetchTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
@@ -94,6 +96,15 @@ final class LiveMapViewModel: ObservableObject {
         setSource(.city(city))
     }
 
+    /// Which modes the screen shows (nil = all). Only their groups are downloaded;
+    /// switching one on loads it at once. Port of Android's `showModes`.
+    func showModes(_ modes: Set<String>?) {
+        let next = LiveGroup.forModes(modes)
+        guard next != groups else { return }
+        groups = next
+        if active { restartFetchLoop() }
+    }
+
     private func setSource(_ next: Source?) {
         guard let next else { return }
         // A free box that moved a bit inside the same area is still the same source
@@ -127,7 +138,7 @@ final class LiveMapViewModel: ObservableObject {
 
     private func restartFetchLoop() {
         fetchTask?.cancel()
-        guard let src = source else { return }
+        guard let src = source, let shown = groups else { return }
         fetchTask = Task { [weak self] in
             // A free map box goes to transitous directly: wait until the map has
             // stopped moving instead of asking once per pan.
@@ -135,7 +146,7 @@ final class LiveMapViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: UInt64(LiveMapConfig.boxSettleMillis) * 1_000_000)
             }
             while !Task.isCancelled {
-                let waitMs = await self?.fetchOnce(src) ?? LiveMapConfig.fetchCityMillis
+                let waitMs = await self?.fetchOnce(src, shown) ?? LiveMapConfig.fetchCityMillis
                 try? await Task.sleep(nanoseconds: UInt64(waitMs) * 1_000_000)
             }
         }
@@ -144,7 +155,7 @@ final class LiveMapViewModel: ObservableObject {
     /// Loads the vehicles once and returns how long to wait before the next load:
     /// the map refreshes a city every 20 s, the Feed (a list, no positions) every
     /// 30 s; a free map box once a minute (`LiveTripsRepository` paces it).
-    private func fetchOnce(_ src: Source) async -> Int {
+    private func fetchOnce(_ src: Source, _ shown: Set<LiveGroup>) async -> Int {
         let cityMs = positionsWanted ? LiveMapConfig.fetchCityMillis : LiveMapConfig.fetchFeedMillis
         guard active else { return cityMs }
         do {
@@ -152,7 +163,10 @@ final class LiveMapViewModel: ObservableObject {
             var waitMs = cityMs
             switch src {
             case .city(let city):
-                snap = try await repo.cityTrips(city, maxAgeMs: Int64(cityMs - 2_000))
+                snap = try await repo.cityTrips(city, groups: shown, maxAgeMs: Int64(cityMs - 2_000))
+            case .box where shown.isEmpty:
+                // Every mode switched off: nothing to load (transitous has all modes in one answer).
+                snap = LiveTripsRepository.Snapshot(segments: [], fetchedAtMs: Int64(Date().timeIntervalSince1970 * 1000), stale: false)
             case .box(let b):
                 snap = try await repo.boxTrips(b)
                 // The map moved out of the fetched area too soon: ask again shortly.
@@ -231,12 +245,12 @@ final class LiveMapViewModel: ObservableObject {
             // Saved routes first (instant), then the server set if the saved one is old.
             let saved = await RouteStore.shared.cached(scope)
             guard let self, self.routeScope == scope else { return }
-            self.routeByKey.merge(saved) { _, new in new }
+            self.routeByKey.merge(saved.filter { hasRouteLine($0.key) }) { _, new in new }
             self.routes = self.routeByKey
             let fresh = await RouteStore.shared.refreshIfStale(scope)
             guard self.routeScope == scope else { return }
             if let fresh {
-                self.routeByKey.merge(fresh) { _, new in new }
+                self.routeByKey.merge(fresh.filter { hasRouteLine($0.key) }) { _, new in new }
                 self.routes = self.routeByKey
             }
             // Only now is it known which lines the set lacks.
@@ -259,6 +273,7 @@ final class LiveMapViewModel: ObservableObject {
         guard routeSetReady else { return }
         let now = Date()
         for key in keys {
+            if !hasRouteLine(key) { continue }   // long distance trains get no route line
             if routeByKey[key] != nil || routeInFlight.contains(key) { continue }
             if let retryAt = routeRetryAt[key], now < retryAt { continue }
             guard let seg = segments.first(where: { $0.tripId != nil && routeKey(mode: $0.mode, label: $0.label) == key }) else { continue }

@@ -44,6 +44,15 @@ final class LocalizationManager: ObservableObject {
         bundle.localizedString(forKey: key, value: key, table: nil)
     }
 
+    /// The singular or plural form of a count text: `<key>_one` for exactly 1,
+    /// else `<key>_other` (German and English need no other forms). `count` is
+    /// also the first format argument. Mirror of Android's <plurals>.
+    func plural(_ key: String, _ count: Int, _ args: CVarArg...) -> String {
+        let form = key + (count == 1 ? "_one" : "_other")
+        let format = bundle.localizedString(forKey: form, value: form, table: nil)
+        return String(format: format, locale: Locale(identifier: effectiveCode), arguments: [count as CVarArg] + args)
+    }
+
     /// Localized, printf-style formatted string (`%1$d`, `%2$@`, …).
     func t(_ key: String, _ args: CVarArg...) -> String {
         let format = bundle.localizedString(forKey: key, value: key, table: nil)

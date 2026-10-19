@@ -5,8 +5,10 @@
 
 /* Feed */
 "feed_city" = "City";
-"feed_trains_live" = "%1$d vehicles live in %2$@";
-"feed_trains_delayed" = "%1$d vehicles in %2$@ · live data delayed";
+"feed_trains_live_one" = "%1$d vehicle live in %2$@";
+"feed_trains_live_other" = "%1$d vehicles live in %2$@";
+"feed_trains_delayed_one" = "%1$d vehicle in %2$@ · live data delayed";
+"feed_trains_delayed_other" = "%1$d vehicles in %2$@ · live data delayed";
 "feed_unavailable" = "Live feed unavailable, retrying…";
 "feed_looking" = "Looking for live vehicles in %1$@…";
 "label_sbahn" = "S-Bahn";
@@ -21,13 +23,20 @@
 "feed_search_hint" = "Search line or station";
 
 /* Map */
-"map_trains_live" = "%1$d trains live · move the map to explore";
-"map_trains_delayed" = "%1$d trains · live data delayed";
+"map_trains_live_one" = "%1$d train live · move the map to explore";
+"map_trains_live_other" = "%1$d trains live · move the map to explore";
+"map_trains_delayed_one" = "%1$d train · live data delayed";
+"map_trains_delayed_other" = "%1$d trains · live data delayed";
 "map_other_rail" = "Rail";
 
 /* Ads */
 "ad_label" = "Ad";
 "ad_skip" = "Skip ad";
+"ad_open" = "Open";
+"settings_version" = "Version %1$@ (%2$@)";
+"update_title" = "Please update Train2Track";
+"update_body" = "This version no longer works correctly. The latest version is waiting for you in the App Store.";
+"update_button" = "Update now";
 
 /* Report */
 "report_title" = "Report";
@@ -53,8 +62,10 @@
 "delay_vote_no" = "On time";
 "delay_vote_thanks_late" = "Thanks! You reported this train as late.";
 "delay_vote_thanks_on_time" = "Thanks! You reported this train as on time.";
-"delay_confirmed_count" = "%d confirm delay";
-"disruptions_banner" = "%d live disruption(s)";
+"delay_confirmed_count_one" = "%d confirms delay";
+"delay_confirmed_count_other" = "%d confirm delay";
+"disruptions_banner_one" = "%d live disruption";
+"disruptions_banner_other" = "%d live disruptions";
 "disruptions_show" = "Show";
 "disruptions_hide" = "Hide";
 "report_submitting" = "Submitting…";
@@ -77,7 +88,7 @@
 
 /* Consent */
 "consent_title" = "Before you start";
-"consent_intro" = "The app only uses what it needs to show live public transport. The option below is off unless you turn it on. Google asks you about advertising in a separate dialog. You can change all of this later in Settings, or delete your data at any time.";
+"consent_intro" = "The app only uses what it needs to show live public transport. The option below is off unless you turn it on. You can change all of this later in Settings, or delete your data at any time.";
 "consent_location_title" = "Location";
 "consent_location_desc" = "Preselects your city and shows your position on the map. Your location stays on your phone.";
 "consent_continue" = "Continue";
@@ -106,7 +117,7 @@
 "about_title" = "Data sources and open source";
 "about_intro" = "Train2Track uses open data. The providers are not responsible for the app.";
 "about_transit_title" = "Timetable and live data";
-"about_transit_body" = "Transitous, an open routing service run by volunteers. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.";
+"about_transit_body" = "Transitous, an open routing service run by volunteers on the open source software MOTIS. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.";
 "about_disruptions_title" = "Disruption notices";
 "about_disruptions_body" = "gtfs.de, under the licence CC BY SA 4.0.";
 "about_map_title" = "Map";
@@ -143,7 +154,8 @@
 "admin_state_dismissed" = "Dismissed";
 "admin_state_throttled" = "%1$d blocked by the spam limit";
 "admin_action_failed" = "Action failed: %1$@";
-"admin_active_users" = "%1$d active users";
+"admin_active_users_one" = "%1$d active user";
+"admin_active_users_other" = "%1$d active users";
 "admin_active_users_split" = "Android %1$d · iOS %2$d · last 10 minutes";
 "admin_active_users_unknown" = "Active users: no data yet";
 "admin_stats_title" = "Inspection statistics (last 30 days)";

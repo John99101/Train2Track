@@ -63,6 +63,11 @@ public enum GeoPolyline {
     /// Returns the polyline points as `[latitude, longitude]` pairs. `precision` is
     /// the number of decimal digits the coordinates were encoded with: MOTIS
     /// map/trips segments use 5, while /api/v1/trip leg geometry uses 7.
+    ///
+    /// A damaged string (cut off in the middle of a value, or not a polyline at
+    /// all) gives the points decoded up to that place instead of crashing: the
+    /// strings come from the network and are kept on the device, so one bad string
+    /// would otherwise crash the app at every start.
     public static func decode(_ encoded: String, precision: Int = 5) -> [GeoPoint] {
         let factor = pow(10.0, Double(precision))
         let chars = Array(encoded.utf8) // polyline chars are ASCII
@@ -70,28 +75,26 @@ public enum GeoPolyline {
         var index = 0
         var lat = 0
         var lng = 0
-        while index < chars.count {
+
+        /// The next value, or nil when the string ends before the value does.
+        func nextValue() -> Int? {
             var shift = 0
             var result = 0
             var b: Int
             repeat {
+                guard index < chars.count, shift < 64 else { return nil }
                 b = Int(chars[index]) - 63
                 index += 1
                 result |= (b & 0x1f) << shift
                 shift += 5
             } while b >= 0x20
-            lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1)
+            return (result & 1) != 0 ? ~(result >> 1) : (result >> 1)
+        }
 
-            shift = 0
-            result = 0
-            repeat {
-                b = Int(chars[index]) - 63
-                index += 1
-                result |= (b & 0x1f) << shift
-                shift += 5
-            } while b >= 0x20
-            lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1)
-
+        while index < chars.count {
+            guard let dLat = nextValue(), let dLng = nextValue() else { break }
+            lat &+= dLat
+            lng &+= dLng
             points.append(GeoPoint(Double(lat) / factor, Double(lng) / factor))
         }
         return points

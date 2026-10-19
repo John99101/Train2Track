@@ -54,8 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -197,6 +199,9 @@ fun EventFeedScreen(
 
     // List the selected city's whole network (no map here).
     LaunchedEffect(selectedCity) { liveViewModel.showCity(selectedCity) }
+    // Download only the modes of the selected filters ("All" and "Current reports" need every mode).
+    val feedMotisModes = remember(modeFilters) { modeFilters.mapNotNullTo(HashSet()) { it.motisMode }.ifEmpty { null } }
+    LaunchedEffect(feedMotisModes) { liveViewModel.showModes(feedMotisModes) }
 
     // Lines currently active for the chosen mode, used to populate the line
     // dropdown. Just the line labels (e.g. "S1", "U6"), distinct and sorted.
@@ -378,9 +383,9 @@ fun EventFeedScreen(
                 // Our server is unreachable (the app asks the source directly, less
                 // often) or serves an older snapshot: say so instead of "live".
                 suTrains.isNotEmpty() && dataDelayed ->
-                    stringResource(R.string.feed_trains_delayed, suTrains.size, selectedCity.name)
+                    pluralStringResource(R.plurals.feed_trains_delayed, suTrains.size, suTrains.size, selectedCity.name)
                 suTrains.isNotEmpty() ->
-                    stringResource(R.string.feed_trains_live, suTrains.size, selectedCity.name)
+                    pluralStringResource(R.plurals.feed_trains_live, suTrains.size, suTrains.size, selectedCity.name)
                 loadError -> stringResource(R.string.feed_unavailable)
                 reportsOnly && trains.isNotEmpty() ->
                     stringResource(R.string.feed_no_reports)
@@ -601,7 +606,7 @@ private fun TrainRow(
                     if (delayConfirmCount > 0) {
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = stringResource(R.string.delay_confirmed_count, delayConfirmCount),
+                            text = pluralStringResource(R.plurals.delay_confirmed_count, delayConfirmCount, delayConfirmCount),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -680,7 +685,7 @@ private fun DisruptionsBanner(disruptions: List<com.mvvtracker.app.data.model.Di
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    stringResource(R.string.disruptions_banner, disruptions.size),
+                    pluralStringResource(R.plurals.disruptions_banner, disruptions.size, disruptions.size),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.weight(1f)
@@ -767,7 +772,7 @@ private fun LineBadge(label: String, color: Color) {
     ) {
         Text(
             text = label,
-            color = Color.White,
+            color = Color(labelColorOn(color.toArgb())),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
             maxLines = 1,

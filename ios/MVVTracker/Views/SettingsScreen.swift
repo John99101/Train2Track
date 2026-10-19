@@ -126,6 +126,13 @@ struct SettingsScreen: View {
                 } footer: {
                     Text(loc.t("settings_delete_desc"))
                 }
+
+                // Which version is installed: helps when someone reports a problem.
+                Section {
+                    Text(loc.t("settings_version", AppInfo.versionName, AppInfo.buildNumber))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle(loc.t("settings_title"))
             .onAppear {

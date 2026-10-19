@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +84,8 @@ fun MapScreen(
         if (selectedModes.size == MapMode.entries.size) null
         else selectedModes.flatMap { it.motisModes }.toSet()
     }
+    // Download only the vehicles of these modes (rail alone by default).
+    LaunchedEffect(modeFilter) { liveViewModel.showModes(modeFilter) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LiveTrainMap(

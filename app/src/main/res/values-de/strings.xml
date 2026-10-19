@@ -12,8 +12,14 @@
 
     <!-- Feed -->
     <string name="feed_city">Stadt</string>
-    <string name="feed_trains_live">%1$d Fahrzeuge live in %2$s</string>
-    <string name="feed_trains_delayed">%1$d Fahrzeuge in %2$s · Livedaten verzögert</string>
+    <plurals name="feed_trains_live">
+        <item quantity="one">%1$d Fahrzeug live in %2$s</item>
+        <item quantity="other">%1$d Fahrzeuge live in %2$s</item>
+    </plurals>
+    <plurals name="feed_trains_delayed">
+        <item quantity="one">%1$d Fahrzeug in %2$s · Livedaten verzögert</item>
+        <item quantity="other">%1$d Fahrzeuge in %2$s · Livedaten verzögert</item>
+    </plurals>
     <string name="feed_unavailable">Livedaten nicht verfügbar, erneuter Versuch…</string>
     <string name="feed_looking">Suche nach Fahrzeugen in %1$s…</string>
     <string name="label_sbahn">S-Bahn</string>
@@ -30,8 +36,14 @@
     <string name="feed_search_hint">Linie oder Station suchen</string>
 
     <!-- Karte -->
-    <string name="map_trains_live">%1$d Bahnen live · Karte bewegen zum Erkunden</string>
-    <string name="map_trains_delayed">%1$d Bahnen · Livedaten verzögert</string>
+    <plurals name="map_trains_live">
+        <item quantity="one">%1$d Bahn live · Karte bewegen zum Erkunden</item>
+        <item quantity="other">%1$d Bahnen live · Karte bewegen zum Erkunden</item>
+    </plurals>
+    <plurals name="map_trains_delayed">
+        <item quantity="one">%1$d Bahn · Livedaten verzögert</item>
+        <item quantity="other">%1$d Bahnen · Livedaten verzögert</item>
+    </plurals>
     <string name="map_loading">Bahnen werden geladen…</string>
     <string name="map_attribution">© Mitwirkende von OpenStreetMap</string>
     <plurals name="map_reports_in_view">
@@ -42,6 +54,7 @@
     <!-- Werbung -->
     <string name="ad_label">Anzeige</string>
     <string name="ad_skip">Anzeige überspringen</string>
+    <string name="ad_open">Öffnen</string>
 
     <!-- Melden -->
     <string name="report_title">Melden</string>
@@ -70,9 +83,15 @@
     <string name="delay_vote_no">Pünktlich</string>
     <string name="delay_vote_thanks_late">Danke! Du hast diesen Zug als verspätet gemeldet.</string>
     <string name="delay_vote_thanks_on_time">Danke! Du hast diesen Zug als pünktlich gemeldet.</string>
-    <string name="delay_confirmed_count">%1$d bestätigen Verspätung</string>
+    <plurals name="delay_confirmed_count">
+        <item quantity="one">%1$d bestätigt Verspätung</item>
+        <item quantity="other">%1$d bestätigen Verspätung</item>
+    </plurals>
     <!-- Störungs-Banner (Phase 6 / Option 2b) -->
-    <string name="disruptions_banner">%1$d aktuelle Störung(en)</string>
+    <plurals name="disruptions_banner">
+        <item quantity="one">%1$d aktuelle Störung</item>
+        <item quantity="other">%1$d aktuelle Störungen</item>
+    </plurals>
     <string name="disruptions_show">Anzeigen</string>
     <string name="disruptions_hide">Ausblenden</string>
     <string name="report_submitting">Wird gesendet…</string>
@@ -93,7 +112,7 @@
 
     <!-- Einwilligung -->
     <string name="consent_title">Bevor du startest</string>
-    <string name="consent_intro">Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Optionen unten sind aus, bis du sie einschaltest. Zur Werbung fragt dich Google in einem eigenen Dialog. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.</string>
+    <string name="consent_intro">Die App nutzt nur, was sie braucht, um dir den Nahverkehr live anzuzeigen. Die Optionen unten sind aus, bis du sie einschaltest. Du kannst all das später in den Einstellungen ändern oder deine Daten jederzeit löschen.</string>
     <string name="consent_analytics_title">Nutzungsstatistik</string>
     <string name="consent_analytics_desc">Erlaubt Google Analytics zu zählen, wie die App genutzt wird, damit wir sie verbessern können. Aus, solange du es nicht einschaltest.</string>
     <string name="consent_location_title">Standort</string>
@@ -120,13 +139,17 @@
     <string name="settings_random_id_copy">Kennung kopieren</string>
     <string name="settings_random_id_copied">Kopiert.</string>
     <string name="settings_delete">Meine Daten löschen</string>
+    <string name="settings_version">Version %1$s (%2$d)</string>
+    <string name="update_title">Bitte aktualisiere Train2Track</string>
+    <string name="update_body">Diese Version funktioniert nicht mehr richtig. Die neueste Version wartet in Google Play auf dich.</string>
+    <string name="update_button">Google Play öffnen</string>
     <string name="settings_delete_desc">Dies widerruft alle Einwilligungen, trennt künftige Aktivität von deinen bisherigen Meldungen und löscht alles auf unseren Servern, was mit deiner Gerätekennung verknüpft ist.</string>
 
     <!-- Data sources and open source -->
     <string name="about_title">Datenquellen und Open Source</string>
     <string name="about_intro">Train2Track nutzt offene Daten. Die Anbieter sind für die App nicht verantwortlich.</string>
     <string name="about_transit_title">Fahrplan und Live Daten</string>
-    <string name="about_transit_body">Transitous, ein offener Routingdienst, den Freiwillige betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.</string>
+    <string name="about_transit_body">Transitous, ein offener Routingdienst, den Freiwillige mit der freien Software MOTIS betreiben. Alle seine Quellen und ihre Lizenzen stehen auf transitous.org/sources. Für Deutschland sind das vor allem Daten des DELFI e.V.: Fahrplandaten unter CC BY 4.0, Live Daten unter CC BY SA.</string>
     <string name="about_disruptions_title">Störungsmeldungen</string>
     <string name="about_disruptions_body">gtfs.de, unter der Lizenz CC BY SA 4.0.</string>
     <string name="about_map_title">Karte</string>
@@ -154,7 +177,10 @@
     <string name="admin_state_dismissed">Verworfen</string>
     <string name="admin_state_throttled">%1$d durch das Spamlimit blockiert</string>
     <string name="admin_action_failed">Aktion fehlgeschlagen: %1$s</string>
-    <string name="admin_active_users">%1$d aktive Nutzer</string>
+    <plurals name="admin_active_users">
+        <item quantity="one">%1$d aktiver Nutzer</item>
+        <item quantity="other">%1$d aktive Nutzer</item>
+    </plurals>
     <string name="admin_active_users_split">Android %1$d · iOS %2$d · letzte 10 Minuten</string>
     <string name="admin_active_users_unknown">Aktive Nutzer: noch keine Daten</string>
     <string name="admin_stats_title">Kontrollstatistik (letzte 30 Tage)</string>

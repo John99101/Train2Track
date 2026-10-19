@@ -54,6 +54,17 @@ val GERMAN_CITIES: List<GermanCity> = listOf(
 )
 
 /**
+ * Cities prepared for a later release and not shown anywhere yet: nothing in the
+ * app reads this list. To make one public, move it into [GERMAN_CITIES] (iOS:
+ * hiddenCities to germanCities) and remove hidden: true in functions/lib/cities.js.
+ * The server and firestore.rules already know both ids.
+ */
+val HIDDEN_CITIES: List<GermanCity> = listOf(
+    GermanCity("leipzig", "Leipzig", 51.3397, 12.3731, "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
+    GermanCity("hannover", "Hannover", 52.3759, 9.7320, "https://www.uestra.de/fahrkarten-preise/")
+)
+
+/**
  * The supported city whose region fully contains the box, preferring the one whose
  * centre is closest to the box centre (regions overlap in the Ruhr area); null when
  * the box is outside every region (or bigger than one).

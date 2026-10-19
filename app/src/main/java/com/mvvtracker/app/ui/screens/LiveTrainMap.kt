@@ -435,8 +435,8 @@ fun LiveTrainMap(
                         loadError && shown.isEmpty() -> stringResource(R.string.feed_unavailable)
                         shown.isEmpty() -> stringResource(R.string.map_loading)
                         // Our server is unreachable or serves an older snapshot.
-                        dataDelayed -> stringResource(R.string.map_trains_delayed, shown.size)
-                        else -> stringResource(R.string.map_trains_live, shown.size)
+                        dataDelayed -> pluralStringResource(R.plurals.map_trains_delayed, shown.size, shown.size)
+                        else -> pluralStringResource(R.plurals.map_trains_live, shown.size, shown.size)
                     },
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -836,7 +836,7 @@ private fun createBadgeBitmap(
     canvas.drawRoundRect(rect, corner, corner, paint)
 
     paint.style = Paint.Style.FILL
-    paint.color = Color.WHITE
+    paint.color = labelColorOn(color)
     val cx = rect.centerX()
     val cy = rect.centerY()
     val fm = paint.fontMetrics

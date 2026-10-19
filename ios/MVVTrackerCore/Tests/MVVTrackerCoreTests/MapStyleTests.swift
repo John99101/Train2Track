@@ -25,4 +25,13 @@ final class MapStyleTests: XCTestCase {
         XCTAssertGreaterThan(drawRank(mode: "BUS", flagged: true), drawRank(mode: "METRO"))
         XCTAssertEqual(drawRank(mode: "BUS", flagged: true), drawRank(mode: "SUBWAY", flagged: true))
     }
+
+    func testOnlyLocalLinesGetARouteLine() {
+        XCTAssertTrue(hasRouteLine(routeKey(mode: "METRO", label: "S1")))
+        XCTAssertTrue(hasRouteLine(routeKey(mode: "BUS", label: "100")))
+        XCTAssertTrue(hasRouteLine(routeKey(mode: "REGIONAL_RAIL", label: "RE5")))
+        XCTAssertFalse(hasRouteLine(routeKey(mode: "HIGHSPEED_RAIL", label: "ICE")))
+        XCTAssertFalse(hasRouteLine(routeKey(mode: "LONG_DISTANCE", label: "IC")))
+        XCTAssertFalse(hasRouteLine(routeKey(mode: "NIGHT_RAIL", label: "NJ")))
+    }
 }

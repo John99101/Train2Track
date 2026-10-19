@@ -22,7 +22,8 @@ struct AboutScreen: View {
 
             source(title: "about_transit_title", text: "about_transit_body", links: [
                 SourceLink(label: "transitous.org/sources", url: "https://transitous.org/sources/"),
-                SourceLink(label: "delfi.de", url: "https://www.delfi.de/")
+                SourceLink(label: "delfi.de", url: "https://www.delfi.de/"),
+                SourceLink(label: "MOTIS", url: "https://motis-project.de/")
             ])
             source(title: "about_disruptions_title", text: "about_disruptions_body", links: [
                 SourceLink(label: "gtfs.de", url: "https://gtfs.de/de/realtime/")

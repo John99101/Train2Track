@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,7 +44,6 @@ import com.mvvtracker.app.data.repository.TripReports
 import com.mvvtracker.app.viewmodel.AdminViewModel
 import java.time.DayOfWeek
 import java.time.format.TextStyle
-import java.util.Locale
 
 /**
  * Admin-only console: who is online, which trains are reported right now (verify,
@@ -133,7 +134,7 @@ private fun LiveUsersCard(live: LiveStats?) {
                 Text(stringResource(R.string.admin_active_users_unknown), style = MaterialTheme.typography.bodyMedium)
             } else {
                 Text(
-                    stringResource(R.string.admin_active_users, live.activeUsers),
+                    pluralStringResource(R.plurals.admin_active_users, live.activeUsers, live.activeUsers),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
@@ -225,8 +226,9 @@ private fun StatsContent(s: ControlStats) {
 
     StatsHeading(R.string.admin_stats_by_weekday)
     val dayMax = s.byWeekday.maxOrNull() ?: 0
+    val locale = LocalConfiguration.current.locales[0]
     s.byWeekday.forEachIndexed { i, n ->
-        BarRow(DayOfWeek.of(i + 1).getDisplayName(TextStyle.SHORT, Locale.getDefault()), n, dayMax)
+        BarRow(DayOfWeek.of(i + 1).getDisplayName(TextStyle.SHORT, locale), n, dayMax)
     }
 
     StatsHeading(R.string.admin_stats_by_hour)

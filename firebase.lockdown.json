@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "rules": "firestore.lockdown.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

@@ -21,9 +21,14 @@ service cloud.firestore {
         || (data[field] is string && data[field].size() <= max);
     }
 
-    // A trip id the apps got from transitous.
+    // A trip id the apps got from transitous. Every one starts with its service day,
+    // "20261016_..." (checked on 16 October 2026: all 49,332 live journeys of the
+    // nine cities), so made up text is refused.
+    function realTripId(tripId) {
+      return tripId.matches('[0-9]{8}_.+');
+    }
     function validTripId(data) {
-      return data.tripId is string && data.tripId.size() > 0 && data.tripId.size() <= 300;
+      return data.tripId is string && data.tripId.size() <= 300 && realTripId(data.tripId);
     }
 
     // The trip id made safe for a document name, exactly as every app version does it.
@@ -67,13 +72,14 @@ service cloud.firestore {
       return hiddenTripDoc(docId, data.tripId) || data.uid == request.auth.uid;
     }
 
-    // Optional: the city the train was seen in (one of the 9 city ids, or "other"),
+    // Optional: the city the train was seen in (one of the city ids, or "other"; Leipzig
+    // and Hannover are prepared but not shown in the apps yet),
     // so each app only loads the reports of the cities it shows. Older app
     // versions send none; the server then files the document under "unknown".
     function validCity(data) {
       return !('city' in data) || data.city in
         ['muenchen', 'berlin', 'hamburg', 'frankfurt', 'nuernberg', 'stuttgart',
-         'koeln', 'duesseldorf', 'dortmund', 'other'];
+         'koeln', 'duesseldorf', 'dortmund', 'leipzig', 'hannover', 'other'];
     }
 
     // Written now with the server clock (the apps use serverTimestamp()), so a
@@ -129,6 +135,7 @@ service cloud.firestore {
         && (!('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid)
         && request.resource.data.tripId is string
         && request.resource.data.tripId.size() <= 300
+        && (request.resource.data.tripId == '' || realTripId(request.resource.data.tripId))
         && validCity(request.resource.data)
         && stampedNow(request.resource.data)
         && optString(request.resource.data, 'line', 100)
@@ -208,6 +215,14 @@ service cloud.firestore {
         && noteId == request.resource.data.collection + '__' + request.resource.data.doc
         && shortExpiry(request.resource.data);
       allow read, delete: if false;
+    }
+
+    // Settings for the apps, edited only by the owner in the Firebase console:
+    // config/app holds androidMinBuild and iosMinBuild, the oldest builds that may
+    // still be used (older ones ask for an update). Readable before sign in.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // Server only bookkeeping (spam limits, moderation, cached line routes).

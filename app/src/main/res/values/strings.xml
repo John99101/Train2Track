@@ -12,8 +12,14 @@
 
     <!-- Feed -->
     <string name="feed_city">City</string>
-    <string name="feed_trains_live">%1$d vehicles live in %2$s</string>
-    <string name="feed_trains_delayed">%1$d vehicles in %2$s · live data delayed</string>
+    <plurals name="feed_trains_live">
+        <item quantity="one">%1$d vehicle live in %2$s</item>
+        <item quantity="other">%1$d vehicles live in %2$s</item>
+    </plurals>
+    <plurals name="feed_trains_delayed">
+        <item quantity="one">%1$d vehicle in %2$s · live data delayed</item>
+        <item quantity="other">%1$d vehicles in %2$s · live data delayed</item>
+    </plurals>
     <string name="feed_unavailable">Live feed unavailable, retrying…</string>
     <string name="feed_looking">Looking for live vehicles in %1$s…</string>
     <string name="label_sbahn">S-Bahn</string>
@@ -30,8 +36,14 @@
     <string name="feed_search_hint">Search line or station</string>
 
     <!-- Map -->
-    <string name="map_trains_live">%1$d trains live · move the map to explore</string>
-    <string name="map_trains_delayed">%1$d trains · live data delayed</string>
+    <plurals name="map_trains_live">
+        <item quantity="one">%1$d train live · move the map to explore</item>
+        <item quantity="other">%1$d trains live · move the map to explore</item>
+    </plurals>
+    <plurals name="map_trains_delayed">
+        <item quantity="one">%1$d train · live data delayed</item>
+        <item quantity="other">%1$d trains · live data delayed</item>
+    </plurals>
     <string name="map_loading">Loading live trains…</string>
     <string name="map_attribution">© OpenStreetMap contributors</string>
     <plurals name="map_reports_in_view">
@@ -42,6 +54,7 @@
     <!-- Ads -->
     <string name="ad_label">Ad</string>
     <string name="ad_skip">Skip ad</string>
+    <string name="ad_open">Open</string>
 
     <!-- Report -->
     <string name="report_title">Report</string>
@@ -70,9 +83,15 @@
     <string name="delay_vote_no">On time</string>
     <string name="delay_vote_thanks_late">Thanks! You reported this train as late.</string>
     <string name="delay_vote_thanks_on_time">Thanks! You reported this train as on time.</string>
-    <string name="delay_confirmed_count">%1$d confirm delay</string>
+    <plurals name="delay_confirmed_count">
+        <item quantity="one">%1$d confirms delay</item>
+        <item quantity="other">%1$d confirm delay</item>
+    </plurals>
     <!-- Disruptions banner (Phase 6 / Option 2b) -->
-    <string name="disruptions_banner">%1$d live disruption(s)</string>
+    <plurals name="disruptions_banner">
+        <item quantity="one">%1$d live disruption</item>
+        <item quantity="other">%1$d live disruptions</item>
+    </plurals>
     <string name="disruptions_show">Show</string>
     <string name="disruptions_hide">Hide</string>
     <string name="report_submitting">Submitting…</string>
@@ -93,7 +112,7 @@
 
     <!-- Consent -->
     <string name="consent_title">Before you start</string>
-    <string name="consent_intro">The app only uses what it needs to show live public transport. The options below are off unless you turn them on. Google asks you about advertising in a separate dialog. You can change all of this later in Settings, or delete your data at any time.</string>
+    <string name="consent_intro">The app only uses what it needs to show live public transport. The options below are off unless you turn them on. You can change all of this later in Settings, or delete your data at any time.</string>
     <string name="consent_analytics_title">Usage statistics</string>
     <string name="consent_analytics_desc">Lets Google Analytics count how the app is used, so we can improve it. Off unless you switch it on.</string>
     <string name="consent_location_title">Location</string>
@@ -120,13 +139,17 @@
     <string name="settings_random_id_copy">Copy ID</string>
     <string name="settings_random_id_copied">Copied.</string>
     <string name="settings_delete">Delete my data</string>
+    <string name="settings_version">Version %1$s (%2$d)</string>
+    <string name="update_title">Please update Train2Track</string>
+    <string name="update_body">This version no longer works correctly. The latest version is waiting for you in Google Play.</string>
+    <string name="update_button">Open Google Play</string>
     <string name="settings_delete_desc">This withdraws all consent, disconnects future activity from your past reports, and erases everything on our servers that is linked to your device identifier.</string>
 
     <!-- Data sources and open source -->
     <string name="about_title">Data sources and open source</string>
     <string name="about_intro">Train2Track uses open data. The providers are not responsible for the app.</string>
     <string name="about_transit_title">Timetable and live data</string>
-    <string name="about_transit_body">Transitous, an open routing service run by volunteers. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.</string>
+    <string name="about_transit_body">Transitous, an open routing service run by volunteers on the open source software MOTIS. All of its sources and their licences are listed at transitous.org/sources. For Germany these are mainly data of DELFI e.V.: timetable data under CC BY 4.0, live data under CC BY SA.</string>
     <string name="about_disruptions_title">Disruption notices</string>
     <string name="about_disruptions_body">gtfs.de, under the licence CC BY SA 4.0.</string>
     <string name="about_map_title">Map</string>
@@ -154,7 +177,10 @@
     <string name="admin_state_dismissed">Dismissed</string>
     <string name="admin_state_throttled">%1$d blocked by the spam limit</string>
     <string name="admin_action_failed">Action failed: %1$s</string>
-    <string name="admin_active_users">%1$d active users</string>
+    <plurals name="admin_active_users">
+        <item quantity="one">%1$d active user</item>
+        <item quantity="other">%1$d active users</item>
+    </plurals>
     <string name="admin_active_users_split">Android %1$d · iOS %2$d · last 10 minutes</string>
     <string name="admin_active_users_unknown">Active users: no data yet</string>
     <string name="admin_stats_title">Inspection statistics (last 30 days)</string>

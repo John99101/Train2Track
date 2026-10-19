@@ -2,6 +2,7 @@ package com.mvvtracker.app.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeoPolylineTest {
@@ -17,6 +18,24 @@ class GeoPolylineTest {
         assertEquals(-120.95, points[1][1], 1e-5)
         assertEquals(43.252, points[2][0], 1e-5)
         assertEquals(-126.453, points[2][1], 1e-5)
+    }
+
+    @Test
+    fun aCutOffStringKeepsTheCompletePoints() {
+        // The canonical example cut off in the middle of the third longitude.
+        val points = GeoPolyline.decode("_p~iF~ps|U_ulLnnqC_mqNvx")
+        assertEquals(2, points.size)
+        assertEquals(40.7, points[1][0], 1e-6)
+        assertEquals(-120.95, points[1][1], 1e-6)
+        assertTrue(GeoPolyline.decode("_p~iF").isEmpty())   // a latitude without its longitude
+        assertTrue(GeoPolyline.decode("~").isEmpty())       // a value that never ends
+    }
+
+    @Test
+    fun garbageDoesNotCrash() {
+        GeoPolyline.decode("~".repeat(500))
+        GeoPolyline.decode("?~".repeat(500))
+        GeoPolyline.decode("ü€ \u0000\n")
     }
 
     @Test

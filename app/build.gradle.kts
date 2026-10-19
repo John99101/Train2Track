@@ -19,15 +19,15 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.mvvtracker.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         manifestPlaceholders += mapOf()
         applicationId = "com.mvvtracker.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.5.1"
+        versionCode = 13
+        versionName = "0.5.2"
 
         // Live map data source: transitous (open MOTIS instance, no API key).
         // /api/v1/map/trips returns active trip segments (S-Bahn/U-Bahn/regional/
@@ -94,21 +94,24 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
 dependencies {
     // Core / Compose
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     // collectAsStateWithLifecycle / LifecycleStartEffect: screens stop loading
     // (live data, Firestore listeners) when the app goes to the background.
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
-    implementation("androidx.activity:activity-compose:1.9.1")
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -116,38 +119,38 @@ dependencies {
     // Extended Material icons (Map, Report, AdminPanelSettings, ... used in
     // the bottom navigation). R8 strips the unused ones in release builds.
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
 
     // Hilt DI
-    implementation("com.google.dagger:hilt-android:2.59.2")
-    ksp("com.google.dagger:hilt-compiler:2.59.2")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("com.google.dagger:hilt-android:2.60.1")
+    ksp("com.google.dagger:hilt-compiler:2.60.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     // Room (local cache)
-    implementation("androidx.room:room-runtime:2.7.2")
-    implementation("androidx.room:room-ktx:2.7.2")
-    ksp("androidx.room:room-compiler:2.7.2")
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     // DataStore for GDPR consent + preferences
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
 
     // Firebase (anonymous auth, Firestore backend). The server functions are
     // called over plain HTTPS (data/remote/ServerFunctions): Google's Functions
     // library would bring the Instance ID component and with it a registration
     // with Google's messaging service, which the app does not use.
-    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-analytics-ktx") // consent-gated, see privacy module
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1") // Task.await()
+    implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
+    implementation("com.google.firebase:firebase-analytics") // consent-gated, see privacy module
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0") // Task.await()
 
     // App Check: attests that requests come from the genuine app binary
     // (Play Integrity in release; a debug provider so emulators/dev builds work).
@@ -159,18 +162,18 @@ dependencies {
 
     // Google AdMob (native ads). Uses Google's public TEST ad unit ids until a
     // real AdMob account is connected - see AdMobIds.
-    implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
     // Google's consent dialog for advertising (certified for the IAB framework):
     // no ad is requested before the user answered it, see privacy/AdsConsent.
-    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
+    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     // WorkManager: the app has no background job any more (it used to tidy old
     // local reports every 15 minutes). Only kept to cancel that old job once on
     // phones that update; the ads SDK brings WorkManager along anyway.
-    implementation("androidx.work:work-runtime:2.9.1")
+    implementation("androidx.work:work-runtime:2.12.0")
 
     testImplementation("junit:junit:4.13.2")
 }

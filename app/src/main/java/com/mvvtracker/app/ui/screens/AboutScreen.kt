@@ -52,7 +52,8 @@ fun AboutScreen() {
             body = stringResource(R.string.about_transit_body),
             links = listOf(
                 "transitous.org/sources" to "https://transitous.org/sources/",
-                "delfi.de" to "https://www.delfi.de/"
+                "delfi.de" to "https://www.delfi.de/",
+                "MOTIS" to "https://motis-project.de/"
             )
         )
         Source(

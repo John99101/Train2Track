@@ -44,3 +44,6 @@ app/build/
 .firebase/
 firebase-debug.log
 *.log
+
+# Kotlin 2.x build data
+.kotlin/

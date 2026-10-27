@@ -83,6 +83,37 @@
     <string name="delay_vote_no">Pünktlich</string>
     <string name="delay_vote_thanks_late">Danke! Du hast diesen Zug als verspätet gemeldet.</string>
     <string name="delay_vote_thanks_on_time">Danke! Du hast diesen Zug als pünktlich gemeldet.</string>
+    <!-- Stationen -->
+    <string name="nav_stations">Stationen</string>
+    <string name="stations_in_city">in %1$s</string>
+    <string name="stations_search_hint">Station suchen</string>
+    <string name="stations_clear">Leeren</string>
+    <string name="stations_recent">Zuletzt geöffnet</string>
+    <string name="stations_empty_hint">Suche eine Station, um die nächsten Abfahrten zu sehen.</string>
+    <string name="stations_no_results">Keine Station in %1$s gefunden.</string>
+    <string name="stations_error">Konnte nicht geladen werden. Bitte prüfe deine Verbindung.</string>
+    <string name="station_departures">Abfahrten</string>
+    <string name="station_no_departures">Gerade keine Abfahrten.</string>
+    <string name="station_platform">Gleis %1$s</string>
+    <string name="station_now">jetzt</string>
+    <string name="station_minutes">%1$d min</string>
+    <string name="station_cancelled">Fällt aus</string>
+    <string name="station_updated">Stand %1$s</string>
+    <string name="station_retry">Erneut versuchen</string>
+    <!-- Wie voll ist es? (Auslastung, fünf Stufen) -->
+    <string name="occupancy_title">Wie voll ist es?</string>
+    <string name="occupancy_level_1">Viele freie Plätze</string>
+    <string name="occupancy_level_2">Freie Plätze</string>
+    <string name="occupancy_level_3">Wenige freie Plätze</string>
+    <string name="occupancy_level_4">Nur Stehplätze</string>
+    <string name="occupancy_level_5">Sehr voll</string>
+    <string name="occupancy_submit">Senden</string>
+    <string name="occupancy_thanks">Danke! Deine Angabe: %1$s</string>
+    <string name="occupancy_meter_desc">Auslastung: %1$s</string>
+    <plurals name="occupancy_votes">
+        <item quantity="one">(%1$d Fahrgast)</item>
+        <item quantity="other">(%1$d Fahrgäste)</item>
+    </plurals>
     <plurals name="delay_confirmed_count">
         <item quantity="one">%1$d bestätigt Verspätung</item>
         <item quantity="other">%1$d bestätigen Verspätung</item>

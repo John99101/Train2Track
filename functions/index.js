@@ -2,7 +2,7 @@
  * Train2Track Cloud Functions (region europe-west3, same as Firestore).
  *
  *  Live data      api (HTTPS via Hosting /api/**), refreshRoutes, rebuildRoutes
- *  Reports        onReportWritten / onDelayVoteWritten (spam limit, hidden names), moderateTrip
+ *  Reports        onReportWritten / onDelayVoteWritten / onOccupancyVoteWritten (spam limit, hidden names), moderateTrip
  *  Disruptions    refreshDisruptions
  *  Statistics     onControlLogCreated (no ID in the log), controlStats (admin), liveStats (active users)
  *  Housekeeping   cleanup, deleteMyData, purgeInactiveUsers
@@ -68,6 +68,7 @@ const CALLABLE = { enforceAppCheck: ENFORCE_APP_CHECK };
 const TRIGGER_MAX_INSTANCES = 10;
 const REPORT_TRIGGER = { document: "reports/{reportId}", maxInstances: TRIGGER_MAX_INSTANCES };
 const VOTE_TRIGGER = { document: "delay_reports/{voteId}", maxInstances: TRIGGER_MAX_INSTANCES };
+const OCCUPANCY_TRIGGER = { document: "occupancy_votes/{voteId}", maxInstances: TRIGGER_MAX_INSTANCES };
 const LOG_TRIGGER = { document: "control_log/{entryId}", maxInstances: TRIGGER_MAX_INSTANCES };
 
 // ---- Live data proxy ---------------------------------------------------------
@@ -196,6 +197,10 @@ exports.onReportWritten = onDocumentWritten(
 
 exports.onDelayVoteWritten = onDocumentWritten(
   VOTE_TRIGGER, (event) => onRiderWrite(event, "delay_reports", "vote"));
+
+// How full a journey is: counted with the same spam limit as the delay votes.
+exports.onOccupancyVoteWritten = onDocumentWritten(
+  OCCUPANCY_TRIGGER, (event) => onRiderWrite(event, "occupancy_votes", "vote"));
 
 /** The riders behind [docs] of the `reports` collection (see lib/reportIds.js). */
 async function reportOwnerUids(docs) {
@@ -463,6 +468,7 @@ exports.cleanup = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 300
     rateLimits: await deleteWhere(db.collection("rate_limits").where("updatedAt", "<", ago(2 * HOUR))),
     reports: await deleteWhere(db.collection("reports").where("expiresAt", "<", ago(24 * HOUR))),
     delayVotes: await deleteWhere(db.collection("delay_reports").where("expiresAt", "<", ago(24 * HOUR))),
+    occupancyVotes: await deleteWhere(db.collection("occupancy_votes").where("expiresAt", "<", ago(24 * HOUR))),
     owners: await deleteWhere(db.collection("doc_owners").where("expiresAt", "<", ago(24 * HOUR))),
     moderation: await deleteWhere(db.collection("trip_moderation").where("dismissedAt", "<", ago(24 * HOUR))),
     oldPushTokens: await deleteWhere(db.collection("users")),
@@ -479,7 +485,7 @@ exports.cleanup = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 300
  * no id (see onControlLogCreated); an entry that still has one loses it here.
  * Finally the anonymous account itself is deleted. Returns what was removed.
  */
-/** Deletes the reports and delay votes of [uid] that are stored under a hidden name. */
+/** Deletes the reports, delay votes and occupancy votes of [uid] that are stored under a hidden name. */
 async function deleteHiddenEntries(uid) {
   let total = 0;
   for (;;) {

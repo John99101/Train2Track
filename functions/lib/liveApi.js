@@ -10,6 +10,10 @@
  *   GET /api/routes/{city}  full line routes           CDN cached 6 h
  *   GET /api/route/{city}/{mode}/{label}/{tripId}
  *                           one line the set lacks     asked from transitous once, then stored
+ *   GET /api/stations/{city}/{text}
+ *                           station search             CDN cached 1 day (see stations.js)
+ *   GET /api/station/{city}/{stopId}
+ *                           departures of a station    CDN cached 30 s
  *
  * The CDN in front means transitous is asked about once per city per ~20 s no
  * matter how many devices are open. The apps never ask transitous for a route
@@ -22,6 +26,7 @@ const zlib = require("zlib");
 const T = require("./transitous");
 const { GROUPS, splitLive, liveHash } = require("./liveGroups");
 const { CITIES } = require("./cities");
+const S = require("./stations");
 
 const LIVE_TTL_MS = 15 * 1000;
 const LIVE_STALE_MAX_MS = 10 * 60 * 1000;
@@ -42,6 +47,14 @@ const CC_ROUTES = "public, max-age=3600, s-maxage=21600";
 const CC_ROUTE = "public, max-age=3600, s-maxage=3600";
 const CC_ROUTE_MISS = "public, max-age=60, s-maxage=60";
 const CC_ERROR = "public, max-age=5, s-maxage=5";
+const CC_STATIONS = "public, max-age=3600, s-maxage=86400";
+const CC_STATION = "public, max-age=20, s-maxage=30";
+const CC_STATION_MISS = "public, max-age=60, s-maxage=300";
+
+const STATIONS_TTL_MS = 6 * 3600 * 1000;
+const STATION_TTL_MS = 25 * 1000;
+// Search texts and stations are many: each cache keeps only the newest this many.
+const MAX_CACHED = 2000;
 
 class Entry {
   constructor(obj) {
@@ -52,11 +65,12 @@ class Entry {
   }
 }
 
-/** Per instance cache with in flight de-duplication. */
+/** Per instance cache with in flight de-duplication, keeping at most [max] entries. */
 class Cache {
-  constructor() {
+  constructor(max = Infinity) {
     this.entries = new Map();
     this.inflight = new Map();
+    this.max = max;
   }
   get(key) { return this.entries.get(key); }
   async load(key, ttlMs, loader) {
@@ -66,7 +80,10 @@ class Cache {
     const p = (async () => {
       try {
         const e = new Entry(await loader());
+        this.entries.delete(key);
         this.entries.set(key, e);
+        // The oldest entry goes first (a Map keeps the order things were added in).
+        if (this.entries.size > this.max) this.entries.delete(this.entries.keys().next().value);
         return e;
       } finally {
         this.inflight.delete(key);
@@ -292,6 +309,42 @@ function createApi({ db, logger }) {
     return pending;
   }
 
+  // ---- Stations (see stations.js) ---------------------------------------------
+  const stationSearch = new Cache(MAX_CACHED);
+  const stationInfo = new Cache(MAX_CACHED);
+
+  async function handleStations(req, res, city, text) {
+    const q = S.normalizeQuery(text);
+    if (!q) return sendError(res, 400, "bad_query");
+    // Asked twice: as typed, and with the city's name in front. The geocoder ranks
+    // by name, so "hauptbahnhof" alone finds the Hauptbahnhof of other cities first
+    // and only "München hauptbahnhof" finds München Hbf.
+    const e = await stationSearch.load(`${city}|${q}`, STATIONS_TTL_MS, async () => {
+      const name = CITIES[city].name.toLowerCase();
+      const [plain, withCity] = await Promise.all([
+        T.searchStops(city, q),
+        q.includes(name) ? [] : T.searchStops(city, `${name} ${q}`).catch(() => []),
+      ]);
+      return S.compactStations(city, [...plain, ...withCity], q);
+    });
+    return send(req, res, e, CC_STATIONS);
+  }
+
+  async function handleStation(req, res, city, stopId) {
+    if (!S.validStopId(stopId)) return sendError(res, 404, "unknown_station");
+    const e = await stationInfo.load(`${city}|${stopId}`, STATION_TTL_MS, async () => {
+      const obj = S.compactDepartures(city, await T.stopTimes(stopId));
+      // Only stations of this city: the server is no free timetable service for anywhere.
+      if (!S.inRegion(city, obj.lat, obj.lon)) return { v: 1, city, missing: true };
+      return obj;
+    });
+    if (e.obj.missing) {
+      res.set("Cache-Control", CC_STATION_MISS);
+      return res.status(404).json({ error: "unknown_station" });
+    }
+    return send(req, res, e, CC_STATION);
+  }
+
   async function handleRoute(req, res, city, mode, label, trip) {
     // Only local lines have routes (see ROUTE_MODES); a long distance train gets 404.
     const valid = T.ROUTE_MODES.has(mode) && label && label.length <= 40 && trip && trip.length <= 300;
@@ -318,7 +371,7 @@ function createApi({ db, logger }) {
     }
     const [kind, city] = parts;
     const group = kind === "live" && parts.length === 3 ? parts[2] : null;
-    const expected = kind === "route" ? 5 : group !== null ? 3 : 2;
+    const expected = kind === "route" ? 5 : group !== null || kind === "stations" || kind === "station" ? 3 : 2;
     if (parts.length !== expected) return sendError(res, 404, "not_found");
     if (group !== null && !GROUPS.includes(group)) return sendError(res, 404, "not_found");
     if (!CITIES[city]) return sendError(res, 404, "unknown_city");
@@ -328,6 +381,8 @@ function createApi({ db, logger }) {
       if (kind === "shapes") return await handleShapes(req, res, city);
       if (kind === "routes") return await handleRoutes(req, res, city);
       if (kind === "route") return await handleRoute(req, res, city, parts[2], parts[3], parts[4]);
+      if (kind === "stations") return await handleStations(req, res, city, parts[2]);
+      if (kind === "station") return await handleStation(req, res, city, parts[2]);
       return sendError(res, 404, "not_found");
     } catch (err) {
       logger.error(`${kind} ${city} failed: ${err.message}`);

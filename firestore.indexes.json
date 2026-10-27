@@ -41,6 +41,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "occupancy_votes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "city",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

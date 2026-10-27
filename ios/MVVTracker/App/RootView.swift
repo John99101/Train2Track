@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import MVVTrackerCore
 
 /// Light/dark preference, stored under the "theme_mode" AppStorage key (parallels
 /// Android's ThemeHelper). `.system` follows the device.
@@ -53,6 +54,8 @@ final class UpdateGate: ObservableObject {
         guard !checked else { return }
         checked = true
         Firestore.firestore().collection("config").document("app").getDocument { [weak self] snap, _ in
+            // The same document holds the CDN for the live data (LiveHost).
+            LiveHost.shared.configure(snap?.get(LiveHostRule.field) as? String)
             let min = (snap?.get("iosMinBuild") as? NSNumber)?.intValue ?? 0
             let build = Int(AppInfo.buildNumber) ?? Int.max
             Task { @MainActor in self?.updateRequired = build < min }
@@ -81,7 +84,7 @@ struct UpdateRequiredView: View {
     }
 }
 
-/// The app's tab shell: Feed and Map (Report opens by tapping a train), the hidden
+/// The app's tab shell: Feed, Map and Stations (Report opens by tapping a train), the hidden
 /// Admin tab (only when the ID token carries the `admin` claim, like Android), plus
 /// Settings. Also owns the app-wide location→city wiring so a manual choice made
 /// in the Feed and the location-based suggestion stay consistent across tabs, and
@@ -118,6 +121,8 @@ struct MainTabs: View {
                 .tabItem { Label(loc.t("nav_feed"), systemImage: "list.bullet") }
             MapScreen()
                 .tabItem { Label(loc.t("nav_map"), systemImage: "map") }
+            StationsScreen()
+                .tabItem { Label(loc.t("nav_stations"), systemImage: "signpost.right.fill") }
             if admin.isAdmin {
                 AdminScreen(admin: admin)
                     .tabItem { Label(loc.t("nav_admin"), systemImage: "checkmark.shield") }

@@ -39,6 +39,24 @@ struct ReportScreen: View {
         return r
     }
 
+    /// How full the journey is, shown from the first rider's vote.
+    private var occupancy: TripOccupancy? { train.tripId.flatMap { reports.occupancy[$0] } }
+
+    /// Where the rider pulled the knob; nil until they touch it.
+    @State private var pulledOccupancy: Int?
+
+    /// The knob: where the rider pulled it, else their current vote, else what riders
+    /// say, else the middle. Pulling only moves it; Submit sends it.
+    private var occupancyLevel: Binding<Int> {
+        Binding(get: { pulledOccupancy ?? occupancy?.ownLevel ?? occupancy?.level ?? 3 },
+                set: { pulledOccupancy = $0 })
+    }
+
+    private var occupancySending: Bool {
+        if case .submitting = vm.occupancyVoteState { return true }
+        return false
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -91,6 +109,14 @@ struct ReportScreen: View {
                     if let to = train.toStop {
                         LabeledContent(loc.t("report_direction")) { Text(to) }
                     }
+                    if let level = occupancy?.level {
+                        HStack(spacing: 8) {
+                            OccupancyMeter(level: level)
+                            Text(loc.t(Occupancy.labelKey(level)))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Text(loc.t("report_subtitle"))
                         .textCase(nil)
@@ -122,6 +148,42 @@ struct ReportScreen: View {
                     Text(loc.t("report_inspection_title"))
                 } footer: {
                     Text(loc.t("report_control_hint"))
+                }
+
+                // How full is it? A bar to pull, green to red, sent only with Submit
+                // (own collection, never the "!"). Kept to one compact row.
+                Section {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            OccupancySlider(level: occupancyLevel)
+                            Text(loc.t(Occupancy.labelKey(occupancyLevel.wrappedValue)))
+                                .font(.footnote.weight(.semibold))
+                        }
+                        Button(loc.t("occupancy_submit")) {
+                            vm.voteOccupancy(tripId: train.tripId, level: occupancyLevel.wrappedValue, city: reportCity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.primary)
+                        .foregroundStyle(Color(.systemBackground))
+                        .disabled(occupancySending)
+                    }
+                    if case .done(let level) = vm.occupancyVoteState {
+                        StatusNote(text: loc.t("occupancy_thanks", loc.t(Occupancy.labelKey(level))),
+                                   systemImage: "checkmark.circle.fill", color: .green)
+                    } else if case .error(let msg) = vm.occupancyVoteState {
+                        StatusNote(text: msg, systemImage: "exclamationmark.triangle.fill", color: .red)
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text(loc.t("occupancy_title"))
+                        Spacer()
+                        // What riders say now (the average of the current votes) and how many.
+                        if let occupancy, let level = occupancy.level {
+                            OccupancyMeter(level: level)
+                            Text(loc.plural("occupancy_votes", occupancy.votes))
+                        }
+                    }
+                    .textCase(nil)
                 }
 
                 // Crowd delay vote (separate backend collection; never the "!").

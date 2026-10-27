@@ -4,9 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.Subway
+import androidx.compose.material.icons.filled.Train
 import androidx.compose.material.icons.filled.Tram
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -23,8 +24,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Our own mode badges (not the operators' trademarked logos): a coloured tile with
-// a letter for S-/U-Bahn and a transit glyph for tram/bus. Colours match the map.
+// Our own mode badges: a coloured circle with a vehicle glyph for every mode. No
+// letter "S" in a green circle or "U" in a blue square: those are the logos of the
+// Deutsche Bahn and the U-Bahn operators. Colours match the map.
 private val METRO_GREEN = Color(0xFF009944)   // S-Bahn
 private val SUBWAY_BLUE = Color(0xFF00629B)   // U-Bahn
 private val TRAM_ORANGE = Color(0xFFD65A14)
@@ -33,12 +35,20 @@ private val OTHER_GREY = Color(0xFF787878)
 
 /**
  * A small symbol for a transport mode, sized to sit inline with text.
- * METRO = S-Bahn (green "S" circle), SUBWAY = U-Bahn (blue "U" square),
- * TRAM (orange tram glyph), BUS (violet bus glyph).
+ * METRO = S-Bahn (green, train), SUBWAY = U-Bahn (blue, train in a tunnel),
+ * TRAM (orange tram glyph), BUS (violet bus glyph), other trains (grey train).
  */
 @Composable
 fun ModeSymbol(mode: String, modifier: Modifier = Modifier, size: Dp = 20.dp) {
     when (mode) {
+        "METRO" -> IconBadge(METRO_GREEN, size, modifier) {
+            Icon(Icons.Filled.Train, contentDescription = "S-Bahn", tint = Color.White,
+                modifier = Modifier.size(size * 0.66f))
+        }
+        "SUBWAY" -> IconBadge(SUBWAY_BLUE, size, modifier) {
+            Icon(Icons.Filled.Subway, contentDescription = "U-Bahn", tint = Color.White,
+                modifier = Modifier.size(size * 0.7f))
+        }
         "BUS" -> IconBadge(BUS_VIOLET, size, modifier) {
             Icon(Icons.Filled.DirectionsBus, contentDescription = "Bus", tint = Color.White,
                 modifier = Modifier.size(size * 0.66f))
@@ -47,8 +57,11 @@ fun ModeSymbol(mode: String, modifier: Modifier = Modifier, size: Dp = 20.dp) {
             Icon(Icons.Filled.Tram, contentDescription = "Tram", tint = Color.White,
                 modifier = Modifier.size(size * 0.66f))
         }
-        "SUBWAY" -> LetterBadge("U", SUBWAY_BLUE, RoundedCornerShape(4.dp), size, modifier)
-        "METRO" -> LetterBadge("S", METRO_GREEN, CircleShape, size, modifier)
+        "REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL" ->
+            IconBadge(OTHER_GREY, size, modifier) {
+                Icon(Icons.Filled.Train, contentDescription = null, tint = Color.White,
+                    modifier = Modifier.size(size * 0.66f))
+            }
         else -> LetterBadge("•", OTHER_GREY, CircleShape, size, modifier)
     }
 }

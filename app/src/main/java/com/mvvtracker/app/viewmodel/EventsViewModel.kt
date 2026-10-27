@@ -62,6 +62,11 @@ class EventsViewModel @Inject constructor(
     val delayVotes: StateFlow<Map<String, Pair<Int, Int>>> = reportBackend.observeDelayVotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /** How full each journey is (riders' votes, see OccupancyAggregation): tripId -> level. */
+    val occupancy: StateFlow<Map<String, com.mvvtracker.app.data.repository.TripOccupancy>> =
+        reportBackend.observeOccupancy()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     /**
      * Live nationwide disruptions (Phase 6 / Option 2b), read from the `disruptions`
      * collection the Cloud Function maintains — a few KB per device, not the 35 MB feed.

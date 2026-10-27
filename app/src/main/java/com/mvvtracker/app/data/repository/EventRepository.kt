@@ -83,6 +83,9 @@ class EventRepository @Inject constructor(
      * is delayed or says it's on time. Stored in a separate backend collection —
      * never touches the inspector-report flow.
      */
+    suspend fun submitOccupancyVote(tripId: String, level: Int, city: String) =
+        userReportBackend.submitOccupancyVote(tripId, level, city)
+
     suspend fun submitDelayVote(tripId: String, confirm: Boolean, city: String) =
         userReportBackend.submitDelayVote(
             tripId,

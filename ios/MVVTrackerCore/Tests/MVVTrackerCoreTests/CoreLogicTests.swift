@@ -67,7 +67,7 @@ final class CityLocatorTests: XCTestCase {
 
     func testDefaultCityIsMunich() {
         XCTAssertEqual(defaultCity.name, "München")
-        XCTAssertEqual(germanCities.count, 9)
+        XCTAssertEqual(germanCities.count, 11)
     }
 }
 

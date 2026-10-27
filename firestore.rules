@@ -72,8 +72,7 @@ service cloud.firestore {
       return hiddenTripDoc(docId, data.tripId) || data.uid == request.auth.uid;
     }
 
-    // Optional: the city the train was seen in (one of the city ids, or "other"; Leipzig
-    // and Hannover are prepared but not shown in the apps yet),
+    // Optional: the city the train was seen in (one of the city ids, or "other"),
     // so each app only loads the reports of the cities it shows. Older app
     // versions send none; the server then files the document under "unknown".
     function validCity(data) {
@@ -88,8 +87,9 @@ service cloud.firestore {
       return data.createdAt == request.time;
     }
 
-    // Expires within 3 hours (reports live 90 min, delay votes 30 min; the rest
-    // is room for a phone clock that is a little ahead). Stops a "!" that never ends.
+    // Expires within 3 hours (reports live 90 min, delay votes 30 min, occupancy
+    // votes 20 min; the rest is room for a phone clock that is a little ahead).
+    // Stops a "!" that never ends.
     function shortExpiry(data) {
       return data.expiresAt is timestamp
         && data.expiresAt <= request.time + duration.value(3, 'h');
@@ -167,6 +167,29 @@ service cloud.firestore {
         && ownStoredDoc(voteId, resource.data);
     }
 
+    // How full a journey is (apps from 0.6.0 on): one vote per rider per journey,
+    // level 1 (many seats free) to 5 (very full). Works like the delay vote, but
+    // only under the hidden name with its owner note (no app ever wrote the old name).
+    match /occupancy_votes/{voteId} {
+      allow read: if signedIn();
+
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['tripId', 'uid', 'level', 'createdAt', 'expiresAt', 'city'])
+        && validTripId(request.resource.data)
+        && hiddenTripDoc(voteId, request.resource.data.tripId)
+        && request.resource.data.uid == voteId
+        && existsAfter(ownerNote('occupancy_votes', voteId))
+        && validCity(request.resource.data)
+        && request.resource.data.level is int
+        && request.resource.data.level >= 1 && request.resource.data.level <= 5
+        && stampedNow(request.resource.data)
+        && shortExpiry(request.resource.data)
+        && noServerFlags();
+
+      allow delete: if signedIn()
+        && hiddenTripDoc(voteId, resource.data.tripId);
+    }
+
     // Nationwide disruptions, written ONLY by the refreshDisruptions Cloud Function
     // (Admin SDK bypasses these rules). Devices read a few KB instead of fetching
     // the 35 MB gtfs.de feed themselves (Phase 6 / Option 2b).
@@ -201,7 +224,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Owner notes: which device a report or delay vote under a hidden name
+    // Owner notes: which device a report, delay vote or occupancy vote under a hidden name
     // belongs to. The app writes the note together with the entry, the server
     // needs it for the spam limit, moderation and "delete my data". No app can
     // read a note, not even its own.
@@ -209,7 +232,7 @@ service cloud.firestore {
       allow create, update: if signedIn()
         && request.resource.data.keys().hasOnly(['uid', 'collection', 'doc', 'tripId', 'expiresAt'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.collection in ['reports', 'delay_reports']
+        && request.resource.data.collection in ['reports', 'delay_reports', 'occupancy_votes']
         && validTripId(request.resource.data)
         && hiddenTripDoc(request.resource.data.doc, request.resource.data.tripId)
         && noteId == request.resource.data.collection + '__' + request.resource.data.doc

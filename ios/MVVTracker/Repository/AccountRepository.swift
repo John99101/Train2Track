@@ -33,6 +33,7 @@ final class AccountRepository {
         OwnReportsStore.shared.clear()
         SeenTrainsStore.shared.clear()
         FilterStore.shared.clear()
+        StationRecents.shared.clear()
         ConsentStore.shared.resetAllConsent()
         AdsManager.shared.resetConsent()
         // Signing out is enough: the app signs in with a fresh id by itself (see

@@ -26,6 +26,16 @@ settings:
     DEVELOPMENT_TEAM: XXXXXXXXXX
     CODE_SIGN_STYLE: Automatic
 
+schemes:
+  Train2Track:
+    build:
+      targets:
+        Train2Track: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
 targets:
   Train2Track:
     type: application
@@ -48,8 +58,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mvvtracker.app
         PRODUCT_NAME: Train2Track
-        MARKETING_VERSION: "0.5.2"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "0.6.0"
+        CURRENT_PROJECT_VERSION: "17"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MVVTracker/Resources/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
@@ -71,3 +81,10 @@ targets:
         product: GoogleUserMessagingPlatform
       - package: MVVTrackerCore
         product: MVVTrackerCore
+    preBuildScripts:
+      - name: Validate Firebase project and release build
+        script: /bin/sh "${SRCROOT}/scripts/validate_firebase.sh"
+        inputFiles:
+          - $(SRCROOT)/scripts/validate_firebase.sh
+          - $(SRCROOT)/MVVTracker/GoogleService-Info.plist
+        basedOnDependencyAnalysis: false

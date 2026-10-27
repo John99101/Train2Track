@@ -1,3 +1,2 @@
 /* Texte der Systemabfragen (zeigt iOS an). Ohne Bindestriche, siehe Übergaberegeln. */
 "NSLocationWhenInUseUsageDescription" = "Wird nur genutzt, um deine Stadt im Feed und deine Position auf der Karte anzuzeigen. Dein Standort bleibt auf deinem Gerät.";
-"NSUserTrackingUsageDescription" = "Erlaubt personalisierte Werbung. Du kannst ablehnen und die App trotzdem vollständig nutzen.";

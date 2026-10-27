@@ -26,13 +26,15 @@ Whoever publishes or operates a version of this app is responsible for the perso
 2. What this code processes
 As a starting point, this is what the code in this repository does:
 • each installation signs in anonymously and gets a random identifier
-• reports and delay votes are stored on the server under a name calculated from the identifier and the journey, together with a note of which identifier they belong to that no app can read
+• reports, delay votes and occupancy votes are stored on the server under a name calculated from the identifier and the journey, together with a note of which identifier they belong to that no app can read
 • while the app is open it sends a signal with the identifier, the time and the platform, so that active installations can be counted
 • the server counts the reports and votes of each identifier for a short time to limit misuse
 • the location is used on the device only and is never sent to the server
 • usage statistics (Android) are off until the user switches them on
 • advertising is requested only after the user has answered the consent dialog
 • requests for live data and map tiles reach the providers of that data with the IP address of the device
+• the station search sends the typed text, and opening a station sends its number, to the server, which asks the provider of the timetable data itself; the stations opened last are kept on the device only
+• the live data can be delivered through a content delivery network that the operator sets in the server configuration; it then receives these requests with the IP address of the device
 
 3. The original service
 The privacy policy of Train2Track is available on its website.
@@ -50,13 +52,15 @@ Wer eine Fassung dieser App veröffentlicht oder betreibt, ist für die personen
 2. Was dieser Code verarbeitet
 Als Ausgangspunkt: Das tut der Code in diesem Repository.
 • jede Installation meldet sich anonym an und erhält eine zufällige Kennung
-• Meldungen und Verspätungsstimmen werden auf dem Server unter einem Namen gespeichert, der aus der Kennung und der Fahrt berechnet wird, zusammen mit einem Vermerk, zu welcher Kennung sie gehören, den keine App lesen kann
+• Meldungen, Verspätungsstimmen und Auslastungsstimmen werden auf dem Server unter einem Namen gespeichert, der aus der Kennung und der Fahrt berechnet wird, zusammen mit einem Vermerk, zu welcher Kennung sie gehören, den keine App lesen kann
 • solange die App geöffnet ist, sendet sie ein Signal mit der Kennung, der Uhrzeit und der Plattform, damit aktive Installationen gezählt werden können
 • der Server zählt die Meldungen und Stimmen jeder Kennung für kurze Zeit, um Missbrauch zu begrenzen
 • der Standort wird nur auf dem Gerät verwendet und nie an den Server gesendet
 • die Nutzungsstatistik (Android) ist aus, bis sie eingeschaltet wird
 • Werbung wird erst angefragt, nachdem der Einwilligungsdialog beantwortet wurde
 • Anfragen nach Live Daten und Kartenkacheln erreichen die Anbieter dieser Daten mit der IP Adresse des Geräts
+• die Stationssuche sendet den eingegebenen Text und das Öffnen einer Station deren Nummer an den Server, der den Anbieter der Fahrplandaten selbst fragt; die zuletzt geöffneten Stationen bleiben nur auf dem Gerät
+• die Live Daten können über ein Content Delivery Network ausgeliefert werden, das der Betreiber in der Serverkonfiguration einstellt; es erhält diese Anfragen dann mit der IP Adresse des Geräts
 
 3. Der ursprüngliche Dienst
 Die Datenschutzerklärung von Train2Track steht auf dessen Website.

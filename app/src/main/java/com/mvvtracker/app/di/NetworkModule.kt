@@ -3,6 +3,8 @@ package com.mvvtracker.app.di
 import com.mvvtracker.app.BuildConfig
 import com.mvvtracker.app.data.live.LiveApiService
 import com.mvvtracker.app.data.live.LiveRoutesService
+import com.mvvtracker.app.data.station.StationApiService
+import com.mvvtracker.app.data.remote.LiveHostInterceptor
 import com.mvvtracker.app.data.remote.TransportApiService
 import com.mvvtracker.app.util.AppInfo
 import dagger.Module
@@ -73,6 +75,8 @@ object NetworkModule {
             .baseUrl(BuildConfig.PROXY_API_BASE)
             .client(
                 client.newBuilder()
+                    // Live data through the CDN when the owner switched it on (LiveHost).
+                    .addInterceptor(LiveHostInterceptor())
                     .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
                     .callTimeout(timeoutSeconds + 5, TimeUnit.SECONDS)
                     .build()
@@ -89,4 +93,9 @@ object NetworkModule {
     @Singleton
     fun provideLiveRoutesService(client: OkHttpClient): LiveRoutesService =
         proxyRetrofit(client, timeoutSeconds = 70).create(LiveRoutesService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideStationApiService(client: OkHttpClient): StationApiService =
+        proxyRetrofit(client, timeoutSeconds = 15).create(StationApiService::class.java)
 }

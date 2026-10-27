@@ -12,14 +12,17 @@ import javax.inject.Singleton
  * console (Firestore, document config/app, number field androidMinBuild) when a
  * released version has a serious fault; that version then asks for an update.
  * No document, no field or no connection: nothing is blocked. iOS reads
- * iosMinBuild from the same document.
+ * iosMinBuild from the same document. The same read also takes the address of the
+ * CDN for the live data (text field liveCdn, see [LiveHost]).
  */
 @Singleton
 class MinVersionCheck @Inject constructor(private val firestore: FirebaseFirestore) {
 
     /** True when this build is older than the oldest build that may still be used. */
     suspend fun updateRequired(): Boolean = try {
-        val min = firestore.collection(COLLECTION).document(DOCUMENT).get().await().getLong(FIELD) ?: 0L
+        val doc = firestore.collection(COLLECTION).document(DOCUMENT).get().await()
+        LiveHost.configure(doc.get(LiveHost.FIELD) as? String)
+        val min = doc.getLong(FIELD) ?: 0L
         BuildConfig.VERSION_CODE < min
     } catch (e: CancellationException) {
         throw e

@@ -33,6 +33,7 @@ class AccountRepository @Inject constructor(
     private val eventDao: EventDao,
     private val seenTrains: SeenTrainsStore,
     private val filterStore: FilterStore,
+    private val stationRecents: com.mvvtracker.app.data.station.StationRecents,
     private val consentManager: ConsentManager,
     private val analyticsSwitch: AnalyticsSwitch,
     private val adsConsent: AdsConsent
@@ -50,6 +51,7 @@ class AccountRepository @Inject constructor(
         eventDao.clearAll()
         seenTrains.clear()
         filterStore.clear()
+        stationRecents.clear()
         // Every consent off (which switches Analytics off) and its data forgotten.
         consentManager.resetAllConsent()
         analyticsSwitch.reset()

@@ -15,6 +15,7 @@ service cloud.firestore {
 
     match /reports/{reportId} { allow read: if signedIn(); }
     match /delay_reports/{voteId} { allow read: if signedIn(); }
+    match /occupancy_votes/{voteId} { allow read: if signedIn(); }
     match /disruptions/{alertId} { allow read: if signedIn(); }
     match /stats/live { allow read: if signedIn(); }
     match /stats/{docId} { allow read: if isAdmin(); }

@@ -23,8 +23,8 @@ const CITIES = {
   koeln: { name: "Köln", lat: 50.9375, lon: 6.9603 },
   duesseldorf: { name: "Düsseldorf", lat: 51.2277, lon: 6.7735 },
   dortmund: { name: "Dortmund", lat: 51.5136, lon: 7.4653 },
-  leipzig: { name: "Leipzig", lat: 51.3397, lon: 12.3731, hidden: true },
-  hannover: { name: "Hannover", lat: 52.3759, lon: 9.732, hidden: true },
+  leipzig: { name: "Leipzig", lat: 51.3397, lon: 12.3731 },
+  hannover: { name: "Hannover", lat: 52.3759, lon: 9.732 },
 };
 
 /** Bounding box of a city's region as transitous min/max ("lat,lon") strings. */

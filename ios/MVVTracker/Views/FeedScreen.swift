@@ -244,10 +244,9 @@ struct FeedScreen: View {
                                      set: { if $0 { setModeFilters([]) } })) {
                     Text(loc.t("feed_filter_all"))
                 }
-                // The four modes show as symbols instead of text.
+                // The four modes show as their symbol and name.
                 ForEach([FeedMode.sbahn, .ubahn, .bus, .tram], id: \.self) { m in
-                    Toggle(isOn: filterBinding(m)) { Image(systemName: symbol(for: m)) }
-                        .accessibilityLabel(Text(modeLabel(m)))
+                    Toggle(isOn: filterBinding(m)) { Label(modeLabel(m), systemImage: symbol(for: m)) }
                 }
                 Toggle(isOn: filterBinding(.reports)) { Text(loc.t("feed_filter_reports")) }
             } label: {
@@ -318,8 +317,8 @@ struct FeedScreen: View {
 
     private func symbol(for m: FeedMode) -> String {
         switch m {
-        case .sbahn: return "s.circle.fill"
-        case .ubahn: return "u.square.fill"
+        case .sbahn: return "train.side.front.car"
+        case .ubahn: return "tram.fill.tunnel"
         case .bus: return "bus.fill"
         case .tram: return "tram.fill"
         case .reports: return "exclamationmark.circle.fill"
@@ -369,6 +368,7 @@ struct FeedScreen: View {
                     train: train,
                     flagged: train.tripId.map(reports.flaggedTripIds.contains) ?? false,
                     delayConfirmCount: reports.delayConfirmCount(for: train.tripId),
+                    occupancyLevel: train.tripId.flatMap { reports.occupancy[$0]?.level },
                     onBuyTicket: { if let url = URL(string: selectedCity.ticketURL) { openURL(url) } }
                 )
                 .contentShape(Rectangle())
@@ -404,6 +404,8 @@ private struct TrainRow: View {
     let train: TrainPosition
     let flagged: Bool
     var delayConfirmCount: Int = 0
+    /// How full it is (riders' votes, 1 to 5), nil when fewer than two riders answered.
+    var occupancyLevel: Int? = nil
     let onBuyTicket: () -> Void
 
     var body: some View {
@@ -437,6 +439,9 @@ private struct TrainRow: View {
                         Text(loc.plural("delay_confirmed_count", delayConfirmCount))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    }
+                    if let occupancyLevel {
+                        OccupancyMeter(level: occupancyLevel, segmentWidth: 6, height: 8)
                     }
                 }
             }
@@ -511,7 +516,8 @@ private struct DisruptionsBanner: View {
 /// "+5 min" / "3 min early" in green/amber/red), or a neutral grey "Scheduled" when
 /// the trip has no live feed — so the user knows when a train is drawn at its
 /// timetable position rather than where it actually is.
-private struct DelayBadge: View {
+/// Also used on a station's departures (StationsScreen).
+struct DelayBadge: View {
     @EnvironmentObject private var loc: LocalizationManager
     let delayMinutes: Int?
     let isRealtime: Bool

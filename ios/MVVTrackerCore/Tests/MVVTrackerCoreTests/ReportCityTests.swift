@@ -14,8 +14,8 @@ final class ReportCityTests: XCTestCase {
     }
 
     func testTrainOutsideEveryRegionIsFiledUnderOther() {
-        XCTAssertEqual(cityOther, reportCity(latitude: 51.3397, longitude: 12.3731))   // Leipzig
-        XCTAssertEqual(cityOther, reportCity(latitude: 52.3759, longitude: 9.7320))    // Hannover
+        XCTAssertEqual(cityOther, reportCity(latitude: 51.0504, longitude: 13.7373))   // Dresden
+        XCTAssertEqual(cityOther, reportCity(latitude: 51.3127, longitude: 9.4797))    // Kassel
     }
 
     func testWhereRegionsOverlapTheNearestCentreWins() {
@@ -57,8 +57,8 @@ final class ReportCityTests: XCTestCase {
     }
 
     func testFreeMapBoxLoadsTheCitiesItTouchesOtherAndUnknown() {
-        // Around Leipzig: no supported city nearby.
-        XCTAssertEqual([cityOther, cityUnknown], reportScope(north: 51.5, south: 51.2, east: 12.6, west: 12.1))
+        // Around Dresden: no supported city nearby.
+        XCTAssertEqual([cityOther, cityUnknown], reportScope(north: 51.2, south: 50.9, east: 13.95, west: 13.5))
         // A box between Köln and Frankfurt that reaches into Köln's region.
         let scope = reportScope(north: 50.75, south: 50.45, east: 7.6, west: 7.2)
         XCTAssertTrue(scope.contains("koeln"))

@@ -21,8 +21,8 @@ class ReportCityTest {
 
     @Test
     fun `a train outside every region is filed under other`() {
-        assertEquals(CITY_OTHER, reportCityAt(51.3397, 12.3731))   // Leipzig
-        assertEquals(CITY_OTHER, reportCityAt(52.3759, 9.7320))    // Hannover
+        assertEquals(CITY_OTHER, reportCityAt(51.0504, 13.7373))   // Dresden
+        assertEquals(CITY_OTHER, reportCityAt(51.3127, 9.4797))    // Kassel
     }
 
     @Test
@@ -68,8 +68,8 @@ class ReportCityTest {
 
     @Test
     fun `a free map box loads the cities it touches, other and unknown`() {
-        // Around Leipzig: no supported city nearby.
-        assertEquals(setOf(CITY_OTHER, CITY_UNKNOWN), reportScopeFor(51.5, 51.2, 12.6, 12.1))
+        // Around Dresden: no supported city nearby.
+        assertEquals(setOf(CITY_OTHER, CITY_UNKNOWN), reportScopeFor(51.2, 50.9, 13.95, 13.5))
         // A box between Köln and Frankfurt that reaches into Köln's region.
         val scope = reportScopeFor(50.75, 50.45, 7.6, 7.2)
         assertTrue("koeln" in scope)
@@ -113,8 +113,8 @@ class ReportCityTest {
 
     @Test
     fun `a view outside the cities belongs to no city`() {
-        // Zoomed out around Leipzig.
-        assertEquals(null, cityForView(51.9, 50.7, 13.0, 11.7))
+        // Zoomed out around Dresden.
+        assertEquals(null, cityForView(51.6, 50.4, 14.4, 13.1))
         // A view of normal size that sticks out of the region is a free map area, as before.
         val m = city("muenchen")
         assertEquals(null, cityForView(m.north + 0.1, m.north - 0.3, m.longitude + 0.2, m.longitude - 0.2))

@@ -4,9 +4,10 @@ import MVVTrackerCore
 
 /// The Map tab: an Apple map centred on the selected city (from the user's
 /// location, or whatever they picked in the Feed) showing every vehicle gliding
-/// along its track. Tapping a train opens the Report screen for it. An on-map
-/// filter (top right) toggles which modes are shown. Port of `MapScreen.kt`
-/// (Apple Maps instead of OpenStreetMap).
+/// along its track. Tapping a train opens the Report screen for it. A row of
+/// buttons along the top toggles which modes are shown; highlighted ones are on
+/// (S-Bahn and U-Bahn until the user picks). Port of `MapScreen.kt` (Apple Maps
+/// instead of OpenStreetMap).
 struct MapScreen: View {
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var citySelection: CitySelection
@@ -14,13 +15,13 @@ struct MapScreen: View {
     @StateObject private var vm = LiveMapViewModel()
     @StateObject private var reports = ReportCountsViewModel()
     @State private var selected: TrainPosition?
-    // On-map mode filter: rail on by default; buses & trams are opt-in (they are
-    // numerous and were the main map performance cost). Kept in the app wide
-    // FilterStore (and on the device), so it survives leaving the Map and restarts.
+    // Mode filter: S-Bahn and U-Bahn until the user picks; buses and trams are
+    // opt-in (they are numerous and were the main map performance cost). Kept in the
+    // app wide FilterStore (and on the device), so it survives leaving the Map and restarts.
     @ObservedObject private var filterStore = FilterStore.shared
 
     private var selectedModes: Set<MapMode> {
-        guard let names = filterStore.mapModes else { return [.sbahn, .ubahn, .rail] }
+        let names = filterStore.mapModes ?? FilterStore.defaultModes
         return Set(MapMode.allCases.filter { names.contains($0.rawValue) })
     }
 
@@ -55,8 +56,12 @@ struct MapScreen: View {
                 onTrainTap: { selected = $0 }
             )
             .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .topLeading) { statusBanner }
-            .overlay(alignment: .topTrailing) { modeFilterButton }
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    modeChips
+                    statusBanner
+                }
+            }
             .navigationTitle(loc.t("nav_map"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -88,7 +93,8 @@ struct MapScreen: View {
             .font(.footnote.weight(.medium))
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
     }
 
     private var statusText: String {
@@ -99,34 +105,43 @@ struct MapScreen: View {
         return loc.plural("map_trains_live", shownTrains.count)
     }
 
-    /// Top-right filter: toggle which modes appear on the map. The menu stays open
-    /// while ticking several modes, like Android's checkbox menu.
-    private var modeFilterButton: some View {
-        Menu {
-            ForEach(MapMode.allCases) { m in
-                Toggle(isOn: Binding(get: { selectedModes.contains(m) },
-                                     set: { on in
-                                         var modes = selectedModes
-                                         if on { modes.insert(m) } else { modes.remove(m) }
-                                         filterStore.setMapModes(Set(modes.map(\.rawValue)))
-                                     })) {
-                    Text(loc.t(m.labelKey))
+    /// Filter buttons along the top: a highlighted button shows its vehicles, a tap
+    /// switches it on or off. Scrolls sideways on narrow screens. Like Android's chips.
+    private var modeChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(MapMode.allCases) { m in
+                    let on = selectedModes.contains(m)
+                    Button {
+                        var modes = selectedModes
+                        if on { modes.remove(m) } else { modes.insert(m) }
+                        filterStore.setMapModes(Set(modes.map(\.rawValue)))
+                    } label: {
+                        HStack(spacing: 6) {
+                            // A faded symbol on a button that is off, so the state does
+                            // not rest on colour alone.
+                            ModeSymbol(mode: m.symbolMode, size: 18).opacity(on ? 1 : 0.4)
+                            Text(loc.t(m.labelKey))
+                                .font(.subheadline.weight(on ? .semibold : .regular))
+                                .foregroundStyle(on ? Color.primary : Color.secondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(on ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.regularMaterial),
+                                    in: Capsule())
+                        .overlay(Capsule().strokeBorder(on ? Color.accentColor : Color.secondary.opacity(0.35),
+                                                        lineWidth: on ? 1.5 : 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
-        } label: {
-            FilterLinesIcon()
-                .frame(width: 20, height: 18)
-                .padding(9)
-                .background(.ultraThinMaterial, in: Circle())
-                .accessibilityLabel(Text(loc.t("feed_filter")))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .menuActionDismissBehavior(.disabled)
-        .tint(.primary)
-        .padding(12)
     }
 }
 
-/// Map mode categories the on-map filter can toggle (Phase 3).
+/// Map mode categories the filter buttons toggle.
 private enum MapMode: String, CaseIterable, Identifiable {
     case sbahn, ubahn, tram, bus, rail
     var id: String { rawValue }
@@ -138,6 +153,17 @@ private enum MapMode: String, CaseIterable, Identifiable {
         case .tram: return ["TRAM"]
         case .bus: return ["BUS"]
         case .rail: return ["REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL"]
+        }
+    }
+
+    /// The mode whose symbol the button shows.
+    var symbolMode: String {
+        switch self {
+        case .sbahn: return "METRO"
+        case .ubahn: return "SUBWAY"
+        case .tram: return "TRAM"
+        case .bus: return "BUS"
+        case .rail: return "REGIONAL_RAIL"
         }
     }
 

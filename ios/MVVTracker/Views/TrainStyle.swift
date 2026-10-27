@@ -45,9 +45,10 @@ extension TrainPosition {
     ]
 }
 
-/// Our own mode badge (not the operators' trademarked logos): a coloured tile with a
-/// letter for S-/U-Bahn and a transit glyph for tram/bus. Sized to sit inline with text.
-/// METRO = S-Bahn (green "S" circle), SUBWAY = U-Bahn (blue "U" square).
+/// Our own mode badge: a coloured circle with a vehicle glyph for every mode. No letter
+/// "S" in a green circle or "U" in a blue square: those are the logos of the Deutsche
+/// Bahn and the U-Bahn operators. Sized to sit inline with text.
+/// METRO = S-Bahn (green, train), SUBWAY = U-Bahn (blue, train in a tunnel).
 struct ModeSymbol: View {
     let mode: String
     var size: CGFloat = 20
@@ -63,8 +64,10 @@ struct ModeSymbol: View {
         switch mode {
         case "BUS": iconBadge("bus.fill", Self.busViolet)
         case "TRAM": iconBadge("tram.fill", Self.tramOrange)
-        case "SUBWAY": letterBadge("U", Self.subwayBlue, corner: size * 0.2)
-        case "METRO": letterBadge("S", Self.metroGreen, corner: size / 2)
+        case "SUBWAY": iconBadge("tram.fill.tunnel", Self.subwayBlue)
+        case "METRO": iconBadge("train.side.front.car", Self.metroGreen)
+        case "REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL":
+            iconBadge("train.side.front.car", Self.otherGrey)
         default: letterBadge("•", Self.otherGrey, corner: size / 2)
         }
     }

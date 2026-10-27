@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.DepartureBoard
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -48,6 +49,9 @@ import com.mvvtracker.app.ui.screens.PrivacyPolicyScreen
 import com.mvvtracker.app.ui.screens.LegalNoticeScreen
 import com.mvvtracker.app.ui.screens.ReportEventScreen
 import com.mvvtracker.app.ui.screens.SettingsScreen
+import com.mvvtracker.app.ui.screens.StationScreen
+import com.mvvtracker.app.ui.screens.StationsScreen
+import com.mvvtracker.app.data.station.StationRef
 import com.mvvtracker.app.viewmodel.AdminViewModel
 import com.mvvtracker.app.viewmodel.CitySelectionViewModel
 import com.mvvtracker.app.viewmodel.PresenceViewModel
@@ -58,6 +62,9 @@ private sealed class Dest(val route: String, val label: String) {
 
     data object Feed : Dest("feed", "Feed")
     data object Map : Dest("map", "Map")
+    data object Stations : Dest("stations", "Stations")
+    // One station's departures, opened from the Stations tab.
+    data object Station : Dest("station?id={id}&name={name}&city={city}&modes={modes}", "Station")
     // Report has no tab; it's reached by tapping a train.
     data object Report : Dest("report?line={line}&trip={trip}&station={station}&mode={mode}&city={city}", "Report")
     data object Admin : Dest("admin", "Admin")
@@ -66,6 +73,10 @@ private sealed class Dest(val route: String, val label: String) {
     data object Legal : Dest("legal", "Legal notice")
     data object About : Dest("about", "Data sources and open source")
 }
+
+private fun stationRoute(s: StationRef): String =
+    "station?id=${Uri.encode(s.id)}&name=${Uri.encode(s.name)}&city=${Uri.encode(s.cityId)}" +
+        "&modes=${Uri.encode(s.modes.joinToString(","))}"
 
 private fun reportRoute(line: String?, tripId: String?, station: String?, mode: String?, city: String?): String =
     "report?line=${Uri.encode(line.orEmpty())}" +
@@ -116,6 +127,7 @@ fun AppNavigation() {
     // the data sources page have no tab of their own).
     val currentTabRoute = when (currentRoute) {
         Dest.Report.route -> reportOrigin
+        Dest.Station.route -> Dest.Stations.route
         Dest.Privacy.route, Dest.Legal.route, Dest.About.route -> Dest.Settings.route
         else -> currentRoute
     }
@@ -126,6 +138,7 @@ fun AppNavigation() {
                 val items = buildList {
                     add(Dest.Feed)
                     add(Dest.Map)
+                    add(Dest.Stations)
                     if (role == UserRole.APP_MANAGER) add(Dest.Admin)
                     add(Dest.Settings)
                 }
@@ -182,6 +195,36 @@ fun AppNavigation() {
                     }
                 )
             }
+            composable(Dest.Stations.route) {
+                StationsScreen(
+                    citySelectionViewModel = citySelectionViewModel,
+                    onOpen = { navController.navigate(stationRoute(it)) }
+                )
+            }
+            composable(
+                route = Dest.Station.route,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("city") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("modes") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) { entry ->
+                val station = StationRef(
+                    id = entry.arguments?.getString("id").orEmpty(),
+                    name = entry.arguments?.getString("name").orEmpty(),
+                    cityId = entry.arguments?.getString("city").orEmpty(),
+                    modes = entry.arguments?.getString("modes").orEmpty().split(",").filter { it.isNotBlank() }
+                )
+                StationScreen(
+                    station = station,
+                    onBack = { navController.popBackStack() },
+                    onOpenTrain = { line, tripId, stationName, mode, city ->
+                        reportOrigin = Dest.Stations.route
+                        navController.navigate(reportRoute(line, tripId, stationName, mode, city))
+                    }
+                )
+            }
             composable(
                 route = Dest.Report.route,
                 arguments = listOf(
@@ -221,6 +264,7 @@ fun AppNavigation() {
 private fun labelResFor(dest: Dest): Int = when (dest) {
     Dest.Feed -> R.string.nav_feed
     Dest.Map -> R.string.nav_map
+    Dest.Stations, Dest.Station -> R.string.nav_stations
     Dest.Report -> R.string.nav_report
     Dest.Admin -> R.string.nav_admin
     Dest.Settings, Dest.Privacy, Dest.Legal, Dest.About -> R.string.nav_settings
@@ -229,6 +273,7 @@ private fun labelResFor(dest: Dest): Int = when (dest) {
 private fun iconFor(dest: Dest) = when (dest) {
     Dest.Map -> Icons.Filled.Map
     Dest.Feed -> Icons.AutoMirrored.Filled.List
+    Dest.Stations, Dest.Station -> Icons.Filled.DepartureBoard
     Dest.Admin -> Icons.Filled.AdminPanelSettings
     else -> Icons.Filled.Settings
 }

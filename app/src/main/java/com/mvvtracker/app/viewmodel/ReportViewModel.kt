@@ -45,6 +45,9 @@ class ReportViewModel @Inject constructor(
     private val _delayVoteState = MutableStateFlow<DelayVoteState>(DelayVoteState.Idle)
     val delayVoteState: StateFlow<DelayVoteState> = _delayVoteState.asStateFlow()
 
+    private val _occupancyVoteState = MutableStateFlow<OccupancyVoteState>(OccupancyVoteState.Idle)
+    val occupancyVoteState: StateFlow<OccupancyVoteState> = _occupancyVoteState.asStateFlow()
+
     fun submit(
         tripId: String?,
         line: String?,
@@ -91,6 +94,20 @@ class ReportViewModel @Inject constructor(
      * Records a delay vote for the train (Phase 6 / Option 2): [confirm] = "yes,
      * it's late", else "no, on time". Independent of the inspector report.
      */
+    fun voteOccupancy(tripId: String?, level: Int, city: String?) {
+        if (tripId.isNullOrBlank()) return
+        val reportCity = city?.takeIf { it.isNotBlank() } ?: CITY_OTHER
+        viewModelScope.launch {
+            _occupancyVoteState.value = OccupancyVoteState.Submitting(level)
+            _occupancyVoteState.value = try {
+                repository.submitOccupancyVote(tripId, level, reportCity)
+                OccupancyVoteState.Done(level)
+            } catch (e: Exception) {
+                OccupancyVoteState.Error(e.message ?: "Could not record your answer.")
+            }
+        }
+    }
+
     fun voteDelay(tripId: String?, confirm: Boolean, city: String?) {
         if (tripId.isNullOrBlank()) return
         val reportCity = city?.takeIf { it.isNotBlank() } ?: CITY_OTHER
@@ -104,6 +121,13 @@ class ReportViewModel @Inject constructor(
             }
         }
     }
+}
+
+sealed interface OccupancyVoteState {
+    data object Idle : OccupancyVoteState
+    data class Submitting(val level: Int) : OccupancyVoteState
+    data class Done(val level: Int) : OccupancyVoteState
+    data class Error(val message: String) : OccupancyVoteState
 }
 
 sealed interface DelayVoteState {

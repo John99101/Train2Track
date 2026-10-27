@@ -11,13 +11,17 @@ import Combine
 final class FilterStore: ObservableObject {
     static let shared = FilterStore()
 
+    /// What the Feed and the Map show until the user picks: S-Bahn and U-Bahn.
+    static let defaultModes: Set<String> = ["sbahn", "ubahn"]
+
     /// Selected Feed filters by name (sbahn, ubahn, bus, tram, reports); empty = all.
+    /// Until the user picks something: S-Bahn and U-Bahn.
     @Published private(set) var feedModes: Set<String>
     /// The single line picked in the Feed, valid only in `feedLineCity` ("S1" is
     /// another line elsewhere).
     @Published private(set) var feedLine: String?
     @Published private(set) var feedLineCity: String?
-    /// Modes shown on the Map by name; nil = the default selection.
+    /// Modes shown on the Map by name; nil = the default selection (S-Bahn and U-Bahn).
     @Published private(set) var mapModes: Set<String>?
 
     private let d = UserDefaults.standard
@@ -29,7 +33,8 @@ final class FilterStore: ObservableObject {
     }
 
     private init() {
-        feedModes = Set(d.stringArray(forKey: Keys.feedModes) ?? [])
+        // Nothing stored yet: the default. A stored empty list is the user's "All".
+        feedModes = d.stringArray(forKey: Keys.feedModes).map { Set($0) } ?? Self.defaultModes
         feedLine = d.string(forKey: Keys.feedLine)
         feedLineCity = d.string(forKey: Keys.feedLineCity)
         mapModes = d.stringArray(forKey: Keys.mapModes).map { Set($0) }
@@ -65,7 +70,7 @@ final class FilterStore: ObservableObject {
 
     /// "Delete my data".
     func clear() {
-        feedModes = []
+        feedModes = Self.defaultModes
         feedLine = nil
         feedLineCity = nil
         mapModes = nil

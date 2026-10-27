@@ -52,17 +52,17 @@ public let germanCities: [GermanCity] = [
     GermanCity(id: "stuttgart", name: "Stuttgart", latitude: 48.7758, longitude: 9.1829, ticketURL: "https://www.vvs.de/tickets-und-abos/einzelticket"),
     GermanCity(id: "koeln", name: "Köln", latitude: 50.9375, longitude: 6.9603, ticketURL: "https://www.kvb.koeln/abos-und-tickets/alle-tickets/index.html"),
     GermanCity(id: "duesseldorf", name: "Düsseldorf", latitude: 51.2277, longitude: 6.7735, ticketURL: "https://www.rheinbahn.de/tickets-und-tarife"),
-    GermanCity(id: "dortmund", name: "Dortmund", latitude: 51.5136, longitude: 7.4653, ticketURL: "https://www.bus-und-bahn.de/tickets")
+    GermanCity(id: "dortmund", name: "Dortmund", latitude: 51.5136, longitude: 7.4653, ticketURL: "https://www.bus-und-bahn.de/tickets"),
+    GermanCity(id: "leipzig", name: "Leipzig", latitude: 51.3397, longitude: 12.3731, ticketURL: "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
+    GermanCity(id: "hannover", name: "Hannover", latitude: 52.3759, longitude: 9.7320, ticketURL: "https://www.uestra.de/fahrkarten-preise/")
 ]
 
 /// Cities prepared for a later release and not shown anywhere yet: nothing in the
 /// app reads this list. To make one public, move it into `germanCities` (Android:
 /// HIDDEN_CITIES to GERMAN_CITIES) and remove hidden: true in functions/lib/cities.js.
-/// The server and firestore.rules already know both ids. Mirror of `HIDDEN_CITIES`.
-public let hiddenCities: [GermanCity] = [
-    GermanCity(id: "leipzig", name: "Leipzig", latitude: 51.3397, longitude: 12.3731, ticketURL: "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
-    GermanCity(id: "hannover", name: "Hannover", latitude: 52.3759, longitude: 9.7320, ticketURL: "https://www.uestra.de/fahrkarten-preise/")
-]
+/// A new city also needs its id in validCity in firestore.rules. Leipzig and
+/// Hannover went public in 0.6.0; none is waiting now. Mirror of `HIDDEN_CITIES`.
+public let hiddenCities: [GermanCity] = []
 
 /// The supported city whose region fully contains the box, preferring the one whose
 /// centre is closest to the box centre (regions overlap in the Ruhr area); nil when

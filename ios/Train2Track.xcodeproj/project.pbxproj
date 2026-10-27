@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		01E3D3B5B9011CCA41287199 /* MVVTrackerCore in Frameworks */ = {isa = PBXBuildFile; productRef = C9D74531BC3C523FA78F4C32 /* MVVTrackerCore */; };
 		06F86590D1214DC6F32E88CE /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1A13AF457FF83EB3C73A3B /* LocalizationManager.swift */; };
+		0EB70079AD85893A8071357A /* OccupancyBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD5FEE183F05845BF5EF5C8 /* OccupancyBar.swift */; };
+		1271F81D3F9D38D01D310FA4 /* StationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485CC0B17AB2E7DC7572D224 /* StationsViewModel.swift */; };
 		1910D2147BA95F1BCF151AD9 /* UserReportBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A7366152E0597060261A81 /* UserReportBackend.swift */; };
 		1C54290445D3CCE97C71981D /* CitySelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C04CA21B8075D597D730728 /* CitySelection.swift */; };
 		228FBA9786612C9B17E7AB86 /* DisruptionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C9CD74707F378B8E7A4D17 /* DisruptionsViewModel.swift */; };
@@ -29,9 +31,11 @@
 		72AF90870BFE236C073E8C42 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 9A04B9287128D2589A4089DA /* Localizable.strings */; };
 		72B99DF159BF129CB6752489 /* MVVTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9D99798DD4F209650BA43B /* MVVTrackerApp.swift */; };
 		76182BE8EAC72FC1A5E79F27 /* LiveTrainMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFC5CC85232A53E18BA298D /* LiveTrainMapView.swift */; };
+		7D599D3AC7655A58EB7D8FCD /* StationApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7633983D94AAA66472C310 /* StationApiClient.swift */; };
 		7F8FBAAE1B003F8428A11E6D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0464332F6B15B3D167572F01 /* RootView.swift */; };
 		81B8CF01AE260C4778A57110 /* AdsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFFF9119DB58D8B251D11550 /* AdsManager.swift */; };
 		825F916A427A0D0DE042144E /* ReportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003AD4AFC7E5CA3FFE86DE6F /* ReportScreen.swift */; };
+		84428A54ABF8740E9EE9EBA8 /* StationRecents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB345601AE804C9C88EC34D /* StationRecents.swift */; };
 		8DC6063F4DFABB6611C2C8B9 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EF16D9F8E9FAA7D985FC6F95 /* GoogleService-Info.plist */; };
 		8F7F2D90D875EAB513AB1772 /* ReportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F1FAC032379EA025FEE5EA /* ReportViewModel.swift */; };
 		96E8D57092572765EE50E832 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FC1A5C344E460A70EB1ECD /* LocationService.swift */; };
@@ -45,6 +49,7 @@
 		C280D6A87648AF75D7226BDD /* AdminViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D7347618E4D378DB516B6E /* AdminViewModel.swift */; };
 		CE974AB5571AB0742C49AAE5 /* RouteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA3E94F5ABDBE325E5E0595 /* RouteStore.swift */; };
 		D1A0B862616D2897D1FC4052 /* ConsentScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F403EC273CDC342939BB962B /* ConsentScreen.swift */; };
+		D4D9CB1A440E6E562AD79D14 /* StationsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9D82DC93CB64BA0D865A314 /* StationsScreen.swift */; };
 		D5974FC09FE6DECFDC31FCA0 /* SeenTrainsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16375DE61FDEBA41414153E8 /* SeenTrainsStore.swift */; };
 		D80EC1863A25ABEB3F35CCFB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CA0220BD2D14C0C8E8F986DE /* PrivacyInfo.xcprivacy */; };
 		D8B48691AE54439AA1A6D9F4 /* GoogleUserMessagingPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = DA1A26625F7604CCB1DD44B7 /* GoogleUserMessagingPlatform */; };
@@ -73,6 +78,7 @@
 		36FC1A5C344E460A70EB1ECD /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		37735605D6E5804DBDB10617 /* Train2Track.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Train2Track.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DCFC37AE12107EF4FFE82C7 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		485CC0B17AB2E7DC7572D224 /* StationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationsViewModel.swift; sourceTree = "<group>"; };
 		4AC665F513DD8039093AD41C /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		4C90908FCF26E965E5A76D8D /* LiveTripsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTripsRepository.swift; sourceTree = "<group>"; };
 		4CC3EC884B6BF02F5A74F3F1 /* OnboardingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingScreen.swift; sourceTree = "<group>"; };
@@ -88,6 +94,7 @@
 		8A5DF5E9D76722E9CB8F064D /* AdminScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminScreen.swift; sourceTree = "<group>"; };
 		8C4DCA8FE828205F548B7B18 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		945947FE55CE88109818BF2A /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		9DD5FEE183F05845BF5EF5C8 /* OccupancyBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OccupancyBar.swift; sourceTree = "<group>"; };
 		9ED521A07A78D05DF900A0EE /* MVVTrackerCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MVVTrackerCore; path = MVVTrackerCore; sourceTree = SOURCE_ROOT; };
 		A1A7366152E0597060261A81 /* UserReportBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserReportBackend.swift; sourceTree = "<group>"; };
 		A7B4DE5270CB1E7969FEA3CF /* MVVTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MVVTracker.entitlements; sourceTree = "<group>"; };
@@ -106,11 +113,14 @@
 		D6C15EE0B2190C933562B741 /* TrainStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainStyle.swift; sourceTree = "<group>"; };
 		DEA3E94F5ABDBE325E5E0595 /* RouteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteStore.swift; sourceTree = "<group>"; };
 		E695E790264915EA7C386C4C /* LiveApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveApiClient.swift; sourceTree = "<group>"; };
+		E9D82DC93CB64BA0D865A314 /* StationsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationsScreen.swift; sourceTree = "<group>"; };
+		EC7633983D94AAA66472C310 /* StationApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationApiClient.swift; sourceTree = "<group>"; };
 		ECE4E069D82B4A9FF25D6B42 /* TransportApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportApiClient.swift; sourceTree = "<group>"; };
 		EF16D9F8E9FAA7D985FC6F95 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		F403EC273CDC342939BB962B /* ConsentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentScreen.swift; sourceTree = "<group>"; };
 		F49CDD6C04E13A64F35AB724 /* AdminBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminBackend.swift; sourceTree = "<group>"; };
 		F967ECBD9443372689E92C71 /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
+		FAB345601AE804C9C88EC34D /* StationRecents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationRecents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,10 +164,12 @@
 				0CFC5CC85232A53E18BA298D /* LiveTrainMapView.swift */,
 				945947FE55CE88109818BF2A /* MapScreen.swift */,
 				5DD3B4443179666338C9F834 /* NativeAdSlot.swift */,
+				9DD5FEE183F05845BF5EF5C8 /* OccupancyBar.swift */,
 				4CC3EC884B6BF02F5A74F3F1 /* OnboardingScreen.swift */,
 				B32EF95CC1CF53DF27BA12B1 /* PrivacyPolicyScreen.swift */,
 				003AD4AFC7E5CA3FFE86DE6F /* ReportScreen.swift */,
 				B11C12812321B64019930025 /* SettingsScreen.swift */,
+				E9D82DC93CB64BA0D865A314 /* StationsScreen.swift */,
 				D6C15EE0B2190C933562B741 /* TrainStyle.swift */,
 			);
 			path = Views;
@@ -171,6 +183,7 @@
 				5F92D0C04BA8F1272AD492C1 /* LiveMapViewModel.swift */,
 				0A403E2869D7A43385FF19AC /* ReportCountsViewModel.swift */,
 				61F1FAC032379EA025FEE5EA /* ReportViewModel.swift */,
+				485CC0B17AB2E7DC7572D224 /* StationsViewModel.swift */,
 			);
 			path = ViewModel;
 			sourceTree = "<group>";
@@ -182,6 +195,7 @@
 				4C90908FCF26E965E5A76D8D /* LiveTripsRepository.swift */,
 				DEA3E94F5ABDBE325E5E0595 /* RouteStore.swift */,
 				B85FC67E8F20FC431FD59A6D /* ShapeStore.swift */,
+				EC7633983D94AAA66472C310 /* StationApiClient.swift */,
 				ECE4E069D82B4A9FF25D6B42 /* TransportApiClient.swift */,
 			);
 			path = Remote;
@@ -253,6 +267,7 @@
 				2ED29EF7533D4243C48E6971 /* OwnReportsStore.swift */,
 				0464332F6B15B3D167572F01 /* RootView.swift */,
 				16375DE61FDEBA41414153E8 /* SeenTrainsStore.swift */,
+				FAB345601AE804C9C88EC34D /* StationRecents.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -264,6 +279,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = C84A34EEF033AB3CCF2276FB /* Build configuration list for PBXNativeTarget "Train2Track" */;
 			buildPhases = (
+				40A5CCFC4EAB8A7C8651AAD9 /* Validate Firebase project and release build */,
 				FF163779CFBC110A3E2449BE /* Sources */,
 				DDB3C7FBCA3C383D93E78165 /* Resources */,
 				E6E68925438FDBB923FED22C /* Frameworks */,
@@ -342,6 +358,30 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		40A5CCFC4EAB8A7C8651AAD9 /* Validate Firebase project and release build */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/validate_firebase.sh",
+				"$(SRCROOT)/MVVTracker/GoogleService-Info.plist",
+			);
+			name = "Validate Firebase project and release build";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"${SRCROOT}/scripts/validate_firebase.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		FF163779CFBC110A3E2449BE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -371,6 +411,7 @@
 				72B99DF159BF129CB6752489 /* MVVTrackerApp.swift in Sources */,
 				DCD1A2D345F1AC63B2AAE3B3 /* MapScreen.swift in Sources */,
 				F164F43006AFD893D9AFF0A5 /* NativeAdSlot.swift in Sources */,
+				0EB70079AD85893A8071357A /* OccupancyBar.swift in Sources */,
 				DE4F91B7B663ED5D7A5151F8 /* OnboardingScreen.swift in Sources */,
 				E1D9B321C466FF696DF12CB7 /* OwnReportsStore.swift in Sources */,
 				26E929D235C6C30AF7ECA173 /* PresenceRepository.swift in Sources */,
@@ -383,6 +424,10 @@
 				D5974FC09FE6DECFDC31FCA0 /* SeenTrainsStore.swift in Sources */,
 				2AF3F41217377F4174C705CF /* SettingsScreen.swift in Sources */,
 				E4B003CF78CE9ED70B858738 /* ShapeStore.swift in Sources */,
+				7D599D3AC7655A58EB7D8FCD /* StationApiClient.swift in Sources */,
+				84428A54ABF8740E9EE9EBA8 /* StationRecents.swift in Sources */,
+				D4D9CB1A440E6E562AD79D14 /* StationsScreen.swift in Sources */,
+				1271F81D3F9D38D01D310FA4 /* StationsViewModel.swift in Sources */,
 				9E82E99F2552CBCCE223A0E9 /* TrainStyle.swift in Sources */,
 				F9731D84FD591C475448B82E /* TransportApiClient.swift in Sources */,
 				1910D2147BA95F1BCF151AD9 /* UserReportBackend.swift in Sources */,
@@ -477,7 +522,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MVVTracker/Resources/MVVTracker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 17;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MVVTracker/Resources/Info.plist;
@@ -485,7 +530,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mvvtracker.app;
 				PRODUCT_NAME = Train2Track;
 				SDKROOT = iphoneos;
@@ -500,7 +545,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MVVTracker/Resources/MVVTracker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 17;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MVVTracker/Resources/Info.plist;
@@ -508,7 +553,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mvvtracker.app;
 				PRODUCT_NAME = Train2Track;
 				SDKROOT = iphoneos;

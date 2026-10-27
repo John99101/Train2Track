@@ -279,6 +279,52 @@ class UserReportBackend @Inject constructor(
         }
 
     /**
+     * "How full is it?": this rider's level on the journey, 1 (many seats free) to 5
+     * (very full), in the `occupancy_votes` collection. One vote per rider per
+     * journey under the hidden name, so a new tap replaces the old one; it counts
+     * for 20 minutes. Throws when it could not be sent.
+     */
+    suspend fun submitOccupancyVote(tripId: String, level: Int, city: String) {
+        require(level in 1..OccupancyAggregation.LEVELS)
+        writeEntry(
+            COLLECTION_OCCUPANCY, tripId, OCCUPANCY_TTL_MILLIS,
+            mapOf("level" to level, "city" to city)
+        )
+    }
+
+    /**
+     * How full each journey is, for the cities on screen (see [OccupancyAggregation]):
+     * re-evaluated every minute so votes older than 20 minutes drop out even when
+     * nothing else changes. Empty on any error.
+     */
+    fun observeOccupancy(): Flow<Map<String, TripOccupancy>> = channelFlow {
+        var latest: List<OccupancyVote> = emptyList()
+        fun emit() = trySend(OccupancyAggregation.aggregate(latest, System.currentTimeMillis()))
+        launch {
+            docsInScope(COLLECTION_OCCUPANCY).collect { snapshot ->
+                val selfUid = auth.currentUser?.uid
+                latest = snapshot.mapNotNull { doc ->
+                    val tripId = doc.getString("tripId") ?: return@mapNotNull null
+                    OccupancyVote(
+                        tripId = tripId,
+                        level = doc.getLong("level")?.toInt() ?: return@mapNotNull null,
+                        expiresAtMs = doc.getTimestamp("expiresAt")?.toDate()?.time,
+                        throttled = doc.getBoolean("throttled") == true,
+                        own = selfUid != null && doc.id == ReportIds.hiddenDocId(selfUid, tripId)
+                    )
+                }
+                emit()
+            }
+        }
+        launch {
+            while (true) {
+                delay(REEVALUATE_MILLIS)
+                emit()
+            }
+        }
+    }
+
+    /**
      * Live nationwide disruptions from the `disruptions` collection (written
      * server-side by the refreshDisruptions Cloud Function). Only active alerts,
      * most-severe first, capped. A few KB per device — never the 35 MB feed.
@@ -317,6 +363,7 @@ class UserReportBackend @Inject constructor(
         const val COLLECTION_REPORTS = "reports"
         const val COLLECTION_CONTROL_LOG = "control_log"
         const val COLLECTION_DELAY_VOTES = "delay_reports"
+        const val COLLECTION_OCCUPANCY = "occupancy_votes"
         const val COLLECTION_DISRUPTIONS = "disruptions"
         const val COLLECTION_OWNERS = "doc_owners"
         // After this long without an answer from the server, sending counts as failed.
@@ -324,6 +371,7 @@ class UserReportBackend @Inject constructor(
         const val FUNCTIONS_REGION = "europe-west3"
         const val REPORT_TTL_MILLIS = 90L * 60 * 1000
         const val DELAY_VOTE_TTL_MILLIS = 30L * 60 * 1000   // delays are ephemeral
+        const val OCCUPANCY_TTL_MILLIS = 20L * 60 * 1000    // a train fills and empties at every stop
         const val REEVALUATE_MILLIS = 60_000L
         const val STATE_ENTERED = "entered"
         const val STATE_EXITED = "exited"

@@ -90,7 +90,7 @@ final class CityRegionTests: XCTestCase {
     func testServerIdsMatchAndroid() {
         XCTAssertEqual(germanCities.map(\.id),
                        ["muenchen", "berlin", "hamburg", "frankfurt", "nuernberg",
-                        "stuttgart", "koeln", "duesseldorf", "dortmund"])
+                        "stuttgart", "koeln", "duesseldorf", "dortmund", "leipzig", "hannover"])
     }
 
     func testBoxInsideMunichIsMunich() {
@@ -118,8 +118,8 @@ final class CityRegionTests: XCTestCase {
 
     /// Port of Android's `a view outside the cities belongs to no city`.
     func testViewOutsideTheCitiesBelongsToNoCity() {
-        // Zoomed out around Leipzig.
-        XCTAssertNil(cityForView(north: 51.9, south: 50.7, east: 13.0, west: 11.7))
+        // Zoomed out around Dresden.
+        XCTAssertNil(cityForView(north: 51.6, south: 50.4, east: 14.4, west: 13.1))
         // A view of normal size that sticks out of the region is a free map area, as before.
         let m = germanCities.first { $0.id == "muenchen" }!
         XCTAssertNil(cityForView(north: m.north + 0.1, south: m.north - 0.3,

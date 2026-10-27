@@ -31,8 +31,17 @@ final class ReportViewModel: ObservableObject {
         case error(String)
     }
 
+    /// "How full is it?": the level being sent or sent, kept apart from the other votes.
+    enum OccupancyVoteState: Equatable {
+        case idle
+        case submitting(Int)
+        case done(Int)
+        case error(String)
+    }
+
     @Published private(set) var state: SubmitState = .idle
     @Published private(set) var delayVoteState: DelayVoteState = .idle
+    @Published private(set) var occupancyVoteState: OccupancyVoteState = .idle
 
     private let backend = UserReportBackend.shared
 
@@ -72,6 +81,20 @@ final class ReportViewModel: ObservableObject {
                 state = .success(movement)
             } catch {
                 state = .error(LocalizationManager.shared.t("report_error_send"))
+            }
+        }
+    }
+
+    /// Records how full the train is, 1 (many seats free) to 5 (very full).
+    func voteOccupancy(tripId: String?, level: Int, city: String) {
+        guard let tripId, !tripId.isEmpty else { return }
+        occupancyVoteState = .submitting(level)
+        Task {
+            do {
+                try await backend.submitOccupancyVote(tripId: tripId, level: level, city: city)
+                occupancyVoteState = .done(level)
+            } catch {
+                occupancyVoteState = .error(LocalizationManager.shared.t("report_error_send"))
             }
         }
     }

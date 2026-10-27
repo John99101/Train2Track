@@ -1,6 +1,7 @@
 package com.mvvtracker.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,20 +51,25 @@ import com.mvvtracker.app.R
 import com.mvvtracker.app.data.model.MovementType
 import com.mvvtracker.app.data.repository.ReportAggregation
 import com.mvvtracker.app.ui.components.ModeSymbol
+import com.mvvtracker.app.ui.components.OccupancyMeter
+import com.mvvtracker.app.ui.components.OccupancySlider
+import com.mvvtracker.app.ui.components.occupancyLabelRes
 import com.mvvtracker.app.ui.components.ReportMark
 import com.mvvtracker.app.ui.components.ReportRed
 import com.mvvtracker.app.util.AppInfo
 import com.mvvtracker.app.viewmodel.CitySelectionViewModel
 import com.mvvtracker.app.viewmodel.DelayVoteState
 import com.mvvtracker.app.viewmodel.EventsViewModel
+import com.mvvtracker.app.viewmodel.OccupancyVoteState
 import kotlinx.coroutines.delay
 import com.mvvtracker.app.viewmodel.ReportSubmitState
 import com.mvvtracker.app.viewmodel.ReportViewModel
 
 /**
  * Report screen for ONE specific train (reached by tapping it). The line and the
- * current station are fixed (from the tapped train). Two grouped cards: a ticket
- * inspection report (on board / has left + submit) and a crowd delay vote.
+ * current station are fixed (from the tapped train). Three grouped cards: a ticket
+ * inspection report (on board / has left + submit), how full the train is (a bar
+ * to pull + submit) and a crowd delay vote.
  */
 @Composable
 fun ReportEventScreen(
@@ -96,6 +104,12 @@ fun ReportEventScreen(
         }
     }
     val reportedMinutes = report?.reportedAtMs?.let { ReportAggregation.minutesSince(it, nowMs) }
+
+    // How full the journey is, from the riders' votes (shown from two riders on).
+    val occupancyByTrip by eventsViewModel.occupancy.collectAsStateWithLifecycle()
+    val occupancyVoteState by reportViewModel.occupancyVoteState.collectAsStateWithLifecycle()
+    val occupancy = tripId?.let { occupancyByTrip[it] }
+    val crowdLevel = occupancy?.level
     val reportedStation = report?.station
 
     Column(
@@ -158,6 +172,17 @@ fun ReportEventScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (crowdLevel != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                            OccupancyMeter(crowdLevel)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(occupancyLabelRes(crowdLevel)),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
                 // A current report on this journey: the same "!" as in the Feed and on
                 // the Map, with when and where the newest report was made.
@@ -248,6 +273,58 @@ fun ReportEventScreen(
                 is ReportSubmitState.Error ->
                     StatusLine(stringResource(R.string.report_error_send), MaterialTheme.colorScheme.error)
                 ReportSubmitState.Idle -> Unit
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // How full is it? A bar to pull, green to red, sent only with Submit (own
+        // collection, never affects the "!"). Kept to three short rows.
+        SectionCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionHeader(Icons.Filled.Groups, stringResource(R.string.occupancy_title))
+                Spacer(Modifier.weight(1f))
+                // What riders say now (the average of the current votes) and how many.
+                if (crowdLevel != null && occupancy != null) {
+                    OccupancyMeter(crowdLevel)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        pluralStringResource(R.plurals.occupancy_votes, occupancy.votes, occupancy.votes),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // The knob starts at this rider's current vote, else at what riders say,
+            // else in the middle; pulling it only moves it.
+            var pulled by remember(tripId) { mutableStateOf<Int?>(null) }
+            val shownLevel = pulled ?: occupancy?.ownLevel ?: crowdLevel ?: 3
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    OccupancySlider(level = shownLevel, onLevelChange = { pulled = it })
+                    Text(
+                        stringResource(occupancyLabelRes(shownLevel)),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 10.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Button(
+                    onClick = { reportViewModel.voteOccupancy(tripId, shownLevel, city) },
+                    enabled = occupancyVoteState !is OccupancyVoteState.Submitting,
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) { Text(stringResource(R.string.occupancy_submit)) }
+            }
+            when (val s = occupancyVoteState) {
+                is OccupancyVoteState.Done ->
+                    StatusLine(
+                        stringResource(R.string.occupancy_thanks, stringResource(occupancyLabelRes(s.level))),
+                        MaterialTheme.colorScheme.primary
+                    )
+                is OccupancyVoteState.Error ->
+                    StatusLine(stringResource(R.string.report_error_send), MaterialTheme.colorScheme.error)
+                else -> Unit
             }
         }
 

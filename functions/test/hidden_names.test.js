@@ -30,6 +30,7 @@ function toValue(v) {
   if (v === null) return { nullValue: null };
   if (typeof v === "string") return { stringValue: v };
   if (typeof v === "boolean") return { booleanValue: v };
+  if (Number.isInteger(v)) return { integerValue: String(v) };
   if (v instanceof Date) return { timestampValue: v.toISOString() };
   throw new Error(`unsupported value ${v}`);
 }
@@ -130,6 +131,10 @@ const vote = (uid, tripId, hidden) => ({
   tripId, uid: hidden ? hiddenDocId(uid, tripId) : uid, vote: "confirm", city: "berlin",
   expiresAt: new Date(Date.now() + 30 * 60 * 1000),
 });
+const occupancy = (uid, tripId, level, extra = {}) => ({
+  tripId, uid: hiddenDocId(uid, tripId), level, city: "leipzig",
+  expiresAt: new Date(Date.now() + 20 * 60 * 1000), ...extra,
+});
 
 const results = [];
 async function test(name, fn) {
@@ -227,7 +232,25 @@ async function test(name, fn) {
     assert.strictEqual(renamed.vote, "confirm");
     await eventually("old vote name gone", async () => (await read(ADMIN, `delay_reports/${legacyDocId(B, trip(4))}`)) === null);
   });
+  await test("occupancy votes: hidden name with note, level 1 to 5 only", async () => {
+    assert.strictEqual(await writeHidden(token(A), "occupancy_votes", A, occupancy(A, trip(6), 4)), true);
+    assert.strictEqual(await writeHidden(token(A), "occupancy_votes", A, occupancy(A, trip(6), 2)), true, "a new tap replaces the old one");
+    assert.strictEqual(await writeHidden(token(A), "occupancy_votes", A, occupancy(A, trip(6), 0)), false);
+    assert.strictEqual(await writeHidden(token(A), "occupancy_votes", A, occupancy(A, trip(6), 6)), false);
+    assert.strictEqual(await writeHidden(token(A), "occupancy_votes", A, occupancy(A, trip(6), 3, { note: "x" })), false);
+    assert.strictEqual(await write(token(A), `occupancy_votes/${hiddenDocId(A, trip(7))}`, occupancy(A, trip(7), 3)), false, "no note");
+    assert.strictEqual(await write(token(B), `occupancy_votes/${legacyDocId(B, trip(6))}`, { ...occupancy(B, trip(6), 3), uid: B }), false, "no old name");
+    assert.strictEqual(await writeHidden(token(B), "occupancy_votes", A, occupancy(A, trip(6), 3), B), false, "not under another name");
+    assert.strictEqual(await writeHidden(token(B), "occupancy_votes", B, occupancy(B, trip(6), 5)), true);
+    const doc = await read(token(C), `occupancy_votes/${hiddenDocId(A, trip(6))}`);
+    assert.strictEqual(doc.level, 2);
+    assert.ok(!JSON.stringify(doc).includes(A), "the entry must not contain the id");
+  });
+  await test("occupancy votes: counted with the delay vote limit", async () => {
+    await eventually("occupancy counted", async () => ((await read(ADMIN, `rate_limits/${A}`)) || { vote: [] }).vote.length >= 3);
+  });
   await test("rules: only the owner may delete a hidden entry", async () => {
+    assert.strictEqual(await remove(token(B), `occupancy_votes/${hiddenDocId(A, trip(6))}`), false);
     const id = hiddenDocId(A, trip(4));
     assert.strictEqual(await remove(token(B), `delay_reports/${id}`), false);
     assert.strictEqual(await remove(token(A), `delay_reports/${id}`), true);
@@ -268,6 +291,9 @@ async function test(name, fn) {
     assert.strictEqual(await read(ADMIN, `doc_owners/reports__${hiddenDocId(B, trip(3))}`), null);
     assert.strictEqual(await read(ADMIN, `delay_reports/${hiddenDocId(B, trip(4))}`), null);
     assert.strictEqual(await read(ADMIN, `doc_owners/delay_reports__${hiddenDocId(B, trip(4))}`), null);
+    assert.strictEqual(await read(ADMIN, `occupancy_votes/${hiddenDocId(B, trip(6))}`), null);
+    assert.strictEqual(await read(ADMIN, `doc_owners/occupancy_votes__${hiddenDocId(B, trip(6))}`), null);
+    assert.ok(await read(ADMIN, `occupancy_votes/${hiddenDocId(A, trip(6))}`), "the votes of other riders stay");
     assert.ok(await read(ADMIN, `reports/${hiddenDocId(A, trip(1))}`), "other riders are not touched");
   });
 

@@ -56,7 +56,7 @@ do {
     check(CityLocator.nearestCity(lat: 52.50, lon: 13.40)?.name == "Berlin", "near Berlin -> Berlin")
     check(CityLocator.nearestCity(lat: 0.0, lon: -30.0) == nil, "mid-Atlantic -> nil")
     check(CityLocator.nearestCity(lat: 51.3127, lon: 9.4797) == nil, "Kassel (>60 km from all) -> nil")
-    check(defaultCity.name == "München" && germanCities.count == 9, "9 cities, default München")
+    check(defaultCity.name == "München" && germanCities.count == 11, "11 cities, default München")
 }
 
 print("TrainInterpolator")

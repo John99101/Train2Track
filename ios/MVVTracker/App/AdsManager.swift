@@ -3,7 +3,6 @@ import UIKit
 import Combine
 import GoogleMobileAds
 import UserMessagingPlatform
-import AppTrackingTransparency
 
 /// The one place that decides whether the app may load advertising. Port of
 /// Android's `privacy/AdsConsent.kt`.
@@ -20,6 +19,15 @@ import AppTrackingTransparency
 /// AdMob. So without an answered dialog there are no ads at all.
 final class AdsManager: ObservableObject {
     static let shared = AdsManager()
+
+    /// Advertising is off since 0.5.2 build 16 (still off in 0.6.0): no consent check with
+    /// Google, no dialog, no ad. App Store Connect only accepts "no tracking" for a
+    /// build without NSUserTrackingUsageDescription, so the tracking question
+    /// (App Tracking Transparency) is taken out too. To bring ads back: set this to
+    /// true, add NSUserTrackingUsageDescription to Info.plist and both
+    /// InfoPlist.strings again, restore `requestTrackingIfAllowed()` (git history,
+    /// handover section 28), and change App Privacy to tracking before the release.
+    static let adsEnabledInThisBuild = false
 
     /// Native ad unit (iOS). Google's public TEST unit in debug so dev builds and
     /// real test devices reliably show test creatives; the real unit in release
@@ -43,6 +51,7 @@ final class AdsManager: ObservableObject {
     /// Called when the tabbed app appears (never on top of the first start
     /// screens), on every start. Call on the main thread.
     func gatherConsent() {
+        guard Self.adsEnabledInThisBuild else { return }
         ConsentInformation.shared.requestConsentInfoUpdate(with: RequestParameters()) { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -76,29 +85,16 @@ final class AdsManager: ObservableObject {
     private func choiceMade() {
         choiceVersion += 1
         refresh()
-        requestTrackingIfAllowed()
     }
 
     private func refresh() {
         let info = ConsentInformation.shared
-        canRequestAds = info.consentStatus == .obtained
-        hasPrivacyOptions = info.privacyOptionsRequirementStatus == .required
+        canRequestAds = Self.adsEnabledInThisBuild && info.consentStatus == .obtained
+        hasPrivacyOptions = Self.adsEnabledInThisBuild && info.privacyOptionsRequirementStatus == .required
         if canRequestAds && !started {
             started = true
             MobileAds.shared.start(completionHandler: nil)
         }
-    }
-
-    /// App Tracking Transparency: the system question for the advertising
-    /// identifier. It is only asked after the user agreed in Google's dialog to
-    /// storing and reading information on the device (purpose 1 of the framework,
-    /// which Google's dialog writes to UserDefaults); someone who declined is not
-    /// asked a second question.
-    private func requestTrackingIfAllowed() {
-        guard canRequestAds, ATTrackingManager.trackingAuthorizationStatus == .notDetermined else { return }
-        let agreed = UserDefaults.standard.string(forKey: "IABTCF_PurposeConsents")?.first == "1"
-        guard agreed else { return }
-        ATTrackingManager.requestTrackingAuthorization { _ in }
     }
 
     /// The view controller currently on top, to present Google's dialog from.

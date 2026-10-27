@@ -54,17 +54,18 @@ the server.
 
 | | |
 |---|---|
-| **Map** | Every vehicle in view moves along its route. Tap one to open it. |
+| **Map** | Every vehicle in view moves along its route. Tap one to open it. Filter buttons along the top choose the modes. |
 | **Feed** | All lines of a city as a live list, with search and filters for S-Bahn, U-Bahn, tram, bus and rail. |
 | **Delays** | Shown per journey where the data sources provide live data. Otherwise the journey is marked as scheduled. |
 | **Disruptions** | Notices from open data, for the selected city. |
-| **Reports** | "On board" marks a journey on which a ticket inspection is taking place. "Has left" ends it. Riders can also vote whether a journey is late. |
+| **Reports** | "On board" marks a journey on which a ticket inspection is taking place. "Has left" ends it. Riders can also vote whether a journey is late and how full it is. |
+| **Stations** | Search a station and see its next departures, with reports and occupancy. |
 | **Ticket button** | Opens the ticket page of the local transport operator. |
 | **Line colours** | Lines appear in the colours riders know from the network maps, where these are known. |
 | **Look** | English and German, light and dark appearance. |
 
-Cities: München, Berlin, Hamburg, Frankfurt, Nürnberg, Stuttgart, Köln, Düsseldorf and
-Dortmund, each with its surrounding area.
+Cities: München, Berlin, Hamburg, Frankfurt, Nürnberg, Stuttgart, Köln, Düsseldorf,
+Dortmund, Leipzig and Hannover, each with its surrounding area.
 
 Positions are calculated from timetable and live data. They show where a vehicle should
 be, not a measured position.
@@ -242,10 +243,11 @@ Put your `google-services.json` into `app/`, then:
 ./gradlew :app:assembleDebug
 ```
 
-**iOS** (Xcode, XcodeGen, iOS 16 or newer)
+**iOS** (Xcode, XcodeGen, iOS 17 or newer)
 
 Put your `GoogleService-Info.plist` into `ios/MVVTracker/`, set your team in
-`ios/project.yml`, then:
+`ios/project.yml` and your project id in `ios/scripts/validate_firebase.sh` (every
+build stops when the config file belongs to another Firebase project), then:
 
 ```bash
 cd ios && xcodegen generate && open Train2Track.xcodeproj
@@ -267,6 +269,9 @@ node functions/test/live_groups.test.js
 
 # How the server asks Transitous for line routes (no network needed)
 node functions/test/routes.test.js
+
+# Station search and departures of a station (no network needed)
+node functions/test/stations.test.js
 
 # Rules and functions on the Firebase emulators (needs Java 21 or newer)
 firebase emulators:exec --only auth,firestore,functions --project demo-t2t "node functions/test/hidden_names.test.js && node functions/test/rules_more.test.js"

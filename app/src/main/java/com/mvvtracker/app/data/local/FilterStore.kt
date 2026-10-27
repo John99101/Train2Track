@@ -19,12 +19,15 @@ class FilterStore @Inject constructor(
     @ApplicationContext context: Context
 ) {
     data class Filters(
-        /** Selected Feed filters by name (S-Bahn, U-Bahn, Bus, Tram, current reports); empty = all. */
-        val feedModes: Set<String> = emptySet(),
+        /**
+         * Selected Feed filters by name (S-Bahn, U-Bahn, Bus, Tram, current reports);
+         * empty = all. Until the user picks something: S-Bahn and U-Bahn.
+         */
+        val feedModes: Set<String> = DEFAULT_MODES,
         /** The single line picked in the Feed, valid only in [feedLineCity] ("S1" is another line elsewhere). */
         val feedLine: String? = null,
         val feedLineCity: String? = null,
-        /** Modes shown on the Map by name; null = the default selection. */
+        /** Modes shown on the Map by name; null = the default selection (S-Bahn and U-Bahn). */
         val mapModes: Set<String>? = null,
         /** The city shown last (the user's location may still replace it at start). */
         val cityId: String? = null
@@ -37,7 +40,8 @@ class FilterStore @Inject constructor(
 
     private val _filters = MutableStateFlow(
         Filters(
-            feedModes = prefs.getStringSet(KEY_FEED_MODES, emptySet()).orEmpty().toSet(),
+            // Nothing stored yet: the default. A stored empty set is the user's "All".
+            feedModes = prefs.getStringSet(KEY_FEED_MODES, null)?.toSet() ?: DEFAULT_MODES,
             feedLine = prefs.getString(KEY_FEED_LINE, null),
             feedLineCity = prefs.getString(KEY_FEED_LINE_CITY, null),
             mapModes = prefs.getStringSet(KEY_MAP_MODES, null)?.toSet(),
@@ -78,11 +82,14 @@ class FilterStore @Inject constructor(
         prefs.edit().clear().apply()
     }
 
-    private companion object {
-        const val KEY_FEED_MODES = "feed_modes"
-        const val KEY_FEED_LINE = "feed_line"
-        const val KEY_FEED_LINE_CITY = "feed_line_city"
-        const val KEY_MAP_MODES = "map_modes"
-        const val KEY_CITY = "city"
+    companion object {
+        /** What the Feed and the Map show until the user picks: S-Bahn and U-Bahn. */
+        val DEFAULT_MODES: Set<String> = setOf("SBAHN", "UBAHN")
+
+        private const val KEY_FEED_MODES = "feed_modes"
+        private const val KEY_FEED_LINE = "feed_line"
+        private const val KEY_FEED_LINE_CITY = "feed_line_city"
+        private const val KEY_MAP_MODES = "map_modes"
+        private const val KEY_CITY = "city"
     }
 }

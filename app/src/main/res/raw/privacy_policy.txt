@@ -9,13 +9,15 @@ Whoever publishes or operates a version of this app is responsible for the perso
 2. What this code processes
 As a starting point, this is what the code in this repository does:
 • each installation signs in anonymously and gets a random identifier
-• reports and delay votes are stored on the server under a name calculated from the identifier and the journey, together with a note of which identifier they belong to that no app can read
+• reports, delay votes and occupancy votes are stored on the server under a name calculated from the identifier and the journey, together with a note of which identifier they belong to that no app can read
 • while the app is open it sends a signal with the identifier, the time and the platform, so that active installations can be counted
 • the server counts the reports and votes of each identifier for a short time to limit misuse
 • the location is used on the device only and is never sent to the server
 • usage statistics (Android) are off until the user switches them on
 • advertising is requested only after the user has answered the consent dialog
 • requests for live data and map tiles reach the providers of that data with the IP address of the device
+• the station search sends the typed text, and opening a station sends its number, to the server, which asks the provider of the timetable data itself; the stations opened last are kept on the device only
+• the live data can be delivered through a content delivery network that the operator sets in the server configuration; it then receives these requests with the IP address of the device
 
 3. The original service
 The privacy policy of Train2Track is available on its website.

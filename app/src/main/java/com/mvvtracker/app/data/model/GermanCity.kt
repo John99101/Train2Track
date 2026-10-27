@@ -50,19 +50,19 @@ val GERMAN_CITIES: List<GermanCity> = listOf(
     GermanCity("stuttgart", "Stuttgart", 48.7758, 9.1829, "https://www.vvs.de/tickets-und-abos/einzelticket"),
     GermanCity("koeln", "Köln", 50.9375, 6.9603, "https://www.kvb.koeln/abos-und-tickets/alle-tickets/index.html"),
     GermanCity("duesseldorf", "Düsseldorf", 51.2277, 6.7735, "https://www.rheinbahn.de/tickets-und-tarife"),
-    GermanCity("dortmund", "Dortmund", 51.5136, 7.4653, "https://www.bus-und-bahn.de/tickets")
+    GermanCity("dortmund", "Dortmund", 51.5136, 7.4653, "https://www.bus-und-bahn.de/tickets"),
+    GermanCity("leipzig", "Leipzig", 51.3397, 12.3731, "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
+    GermanCity("hannover", "Hannover", 52.3759, 9.7320, "https://www.uestra.de/fahrkarten-preise/")
 )
 
 /**
  * Cities prepared for a later release and not shown anywhere yet: nothing in the
  * app reads this list. To make one public, move it into [GERMAN_CITIES] (iOS:
  * hiddenCities to germanCities) and remove hidden: true in functions/lib/cities.js.
- * The server and firestore.rules already know both ids.
+ * A new city also needs its id in validCity in firestore.rules. Leipzig and
+ * Hannover went public in 0.6.0; none is waiting now.
  */
-val HIDDEN_CITIES: List<GermanCity> = listOf(
-    GermanCity("leipzig", "Leipzig", 51.3397, 12.3731, "https://www.mdv.de/tickets-tarif/tickets/alle-tickets"),
-    GermanCity("hannover", "Hannover", 52.3759, 9.7320, "https://www.uestra.de/fahrkarten-preise/")
-)
+val HIDDEN_CITIES: List<GermanCity> = emptyList()
 
 /**
  * The supported city whose region fully contains the box, preferring the one whose

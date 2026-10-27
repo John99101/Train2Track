@@ -205,6 +205,44 @@ final class UserReportBackend {
         }
     }
 
+    // MARK: - How full is it? (occupancy votes, from 0.6.0)
+
+    private var occupancyVotes: CollectionReference { db.collection(Self.occupancyCollection) }
+
+    /// This rider's level on the journey, 1 (many seats free) to 5 (very full), in the
+    /// `occupancy_votes` collection. One vote per rider per journey under the hidden
+    /// name, so a new tap replaces the old one; it counts for 20 minutes. Throws when
+    /// it could not be sent. Port of Android's `submitOccupancyVote`.
+    func submitOccupancyVote(tripId: String, level: Int, city: String) async throws {
+        precondition((1...OccupancyAggregation.levels).contains(level))
+        try await writeEntry(
+            collection: Self.occupancyCollection, tripId: tripId, ttl: OccupancyAggregation.ttl,
+            fields: ["level": level, "city": city]
+        )
+    }
+
+    /// The live occupancy votes of the report `cities` on screen, each marked when it
+    /// is this installation's own. The caller counts them with `OccupancyAggregation`
+    /// (and again every minute, so old votes drop out). Empty on any error.
+    @discardableResult
+    func observeOccupancyVotes(cities: [String]? = nil,
+                               _ onChange: @escaping ([OccupancyVote]) -> Void) -> ListenerRegistration {
+        AuthGatedListener { [occupancyVotes] in
+            CityScopedListener(collection: occupancyVotes, cities: cities) { documents in
+                guard let documents else { onChange([]); return }
+                let selfUid = Auth.auth().currentUser?.uid
+                onChange(documents.compactMap { doc -> OccupancyVote? in
+                    guard let tripId = doc["tripId"] as? String,
+                          let level = (doc["level"] as? NSNumber)?.intValue else { return nil }
+                    let expires = (doc["expiresAt"] as? Timestamp).map { Int64($0.dateValue().timeIntervalSince1970 * 1000) }
+                    let own = selfUid.map { doc.documentID == ReportKey.hiddenDocumentId(uid: $0, tripId: tripId) } ?? false
+                    return OccupancyVote(tripId: tripId, level: level, expiresAtMs: expires,
+                                         throttled: doc["throttled"] as? Bool == true, own: own)
+                })
+            }
+        }
+    }
+
     // MARK: - Disruptions (Phase 6 / Option 2b — server-proxied)
 
     /// Live nationwide disruptions from the `disruptions` collection, written
@@ -241,6 +279,7 @@ final class UserReportBackend {
     private static let delayConfirm = "confirm"
     private static let delayOnTime = "on_time"
     private static let delayVoteTtl: TimeInterval = 30 * 60   // 30 min
+    private static let occupancyCollection = "occupancy_votes"
 }
 
 /// A running report listener plus its once-a-minute re-evaluation timer.

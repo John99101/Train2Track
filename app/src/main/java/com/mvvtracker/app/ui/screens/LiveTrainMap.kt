@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -44,6 +45,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mvvtracker.app.R
 import androidx.compose.ui.viewinterop.AndroidView
@@ -118,6 +120,56 @@ private const val PALE_MAP_SATURATION = 0.3f
 private const val PALE_MAP_CONTRAST = 0.78f   // darkest text becomes dark grey ...
 private const val PALE_MAP_LIFT = 56f         // ... and white stays white (0.78 * 255 + 56)
 
+/**
+ * The same tiles for dark mode: light and dark are swapped, then the hues are
+ * turned back (water stays blue, parks green) and everything is pulled into a
+ * calm dark range, so the coloured lines and vehicles stand out as on the pale map.
+ */
+private val DARK_MAP: ColorFilter = ColorMatrixColorFilter(
+    ColorMatrix().apply {
+        setSaturation(DARK_MAP_SATURATION)
+        // Swap light and dark.
+        postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    -1f, 0f, 0f, 0f, 255f,
+                    0f, -1f, 0f, 0f, 255f,
+                    0f, 0f, -1f, 0f, 255f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        )
+        // Turn the hues by 180 degrees, back to what they were (greys stay grey).
+        postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    -0.574f, 1.430f, 0.144f, 0f, 0f,
+                    0.426f, 0.430f, 0.144f, 0f, 0f,
+                    0.426f, 1.430f, -0.856f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        )
+        // White land becomes a dark blue grey, black text a soft light grey.
+        postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    DARK_MAP_CONTRAST, 0f, 0f, 0f, 28f,
+                    0f, DARK_MAP_CONTRAST, 0f, 0f, 31f,
+                    0f, 0f, DARK_MAP_CONTRAST, 0f, 36f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        )
+    }
+)
+private const val DARK_MAP_SATURATION = 0.35f
+private const val DARK_MAP_CONTRAST = 0.6f    // text: 0.6 * 255 + 30 = about 183
+
+// The grid shown where a tile is still loading, for each look.
+private val LOADING_LIGHT = android.graphics.Color.rgb(216, 208, 208) to android.graphics.Color.rgb(200, 192, 192)
+private val LOADING_DARK = android.graphics.Color.rgb(30, 33, 38) to android.graphics.Color.rgb(44, 48, 54)
+
 @Composable
 fun LiveTrainMap(
     liveViewModel: LiveMapViewModel,
@@ -126,6 +178,8 @@ fun LiveTrainMap(
     modeFilter: Set<String>?,
     flaggedTripIds: Set<String>,
     showUserLocation: Boolean = false,
+    // Room taken by controls on top of the map (the filter buttons): the notes start below it.
+    topInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
     onTrainClick: (line: String, tripId: String?, station: String?, mode: String?, city: String) -> Unit =
         { _, _, _, _, _ -> }
@@ -154,6 +208,9 @@ fun LiveTrainMap(
     val routeLines = remember { HashMap<String, RouteLine>() }
     val badges = remember { HashMap<String, Badge>() }
     val drawn = remember { DrawnStyle() }
+
+    // Dark map in dark mode: follows the app's own light/dark choice, not only the phone's.
+    val darkMap = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     // The badge size and line width follow the zoom; a tapped line is shown in full colour.
     var tier by remember { mutableStateOf(zoomTier(START_ZOOM)) }
@@ -195,6 +252,15 @@ fun LiveTrainMap(
             overlays.add(vehicleLayer)
             onResume()
         }
+    }
+
+    LaunchedEffect(mapView, darkMap) {
+        val tiles = mapView.overlayManager.tilesOverlay
+        tiles.setColorFilter(if (darkMap) DARK_MAP else PALE_MAP)
+        val (background, lines) = if (darkMap) LOADING_DARK else LOADING_LIGHT
+        tiles.loadingBackgroundColor = background
+        tiles.loadingLineColor = lines
+        mapView.invalidate()
     }
 
     val reportBounds = remember(mapView) {
@@ -425,7 +491,11 @@ fun LiveTrainMap(
             }
         )
 
-        Column(modifier = Modifier.align(Alignment.TopStart).padding(12.dp)) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 12.dp + topInset)
+        ) {
             Surface(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                 shape = MaterialTheme.shapes.small

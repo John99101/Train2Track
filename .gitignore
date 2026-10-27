@@ -23,6 +23,18 @@ ios/spm-cache/
 .build/
 DerivedData/
 *.xcarchive
+*.ipa
+
+# Fastlane / Bundler local files and signing material
+ios/.bundle/
+ios/vendor/
+ios/fastlane/report.xml
+ios/fastlane/README.md
+ios/fastlane/.env*
+# App Store Connect API key JSON files (including local files named by Key ID)
+ios/*.json
+*.p12
+*.mobileprovision
 
 # Xcode per-user state
 xcuserdata/

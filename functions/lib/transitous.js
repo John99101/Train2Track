@@ -250,7 +250,19 @@ async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full 
   return { rows: [...merged.values()], asked: todo.length };
 }
 
+/** Stops whose name matches [text], the ones near the city first (transitous geocoder). */
+async function searchStops(cityId, text) {
+  const c = CITIES[cityId];
+  return getJson("/api/v1/geocode", { text, type: "STOP", place: `${c.lat},${c.lon}`, language: "de" }, 10000);
+}
+
+/** The next departures at the stop [stopId] (and its platforms). */
+async function stopTimes(stopId, n = 30) {
+  return getJson("/api/v1/stoptimes", { stopId, n: String(n), language: "de" }, 10000);
+}
+
 module.exports = {
   CITIES, SHOWN_MODES, ROUTE_MODES, USER_AGENT, LIVE_WINDOW, LIVE_STEP_MS,
   shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, mapTrips,
+  searchStops, stopTimes,
 };

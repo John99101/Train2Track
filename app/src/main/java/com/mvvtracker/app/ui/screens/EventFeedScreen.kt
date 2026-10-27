@@ -135,6 +135,7 @@ fun EventFeedScreen(
     val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
     val remoteCounts by eventsViewModel.remoteReportCounts.collectAsStateWithLifecycle()
     val delayVotes by eventsViewModel.delayVotes.collectAsStateWithLifecycle()
+    val occupancy by eventsViewModel.occupancy.collectAsStateWithLifecycle()
     val disruptions by eventsViewModel.disruptions.collectAsStateWithLifecycle()
     val trains by liveViewModel.trains.collectAsStateWithLifecycle()
     val loadError by liveViewModel.loadError.collectAsStateWithLifecycle()
@@ -320,7 +321,7 @@ fun EventFeedScreen(
                     FilterMenuItem(stringResource(R.string.feed_filter_all), modeFilters.isEmpty()) {
                         setModeFilters(emptySet()); filterMenuOpen = false
                     }
-                    // The four modes show as symbols instead of text.
+                    // The four modes show as their symbol and name.
                     listOf(FeedMode.SBAHN, FeedMode.UBAHN, FeedMode.BUS, FeedMode.TRAM).forEach { m ->
                         FilterModeItem(m.motisMode!!, m in modeFilters) { setModeFilters(modeFilters.toggle(m)) }
                     }
@@ -424,6 +425,7 @@ fun EventFeedScreen(
                     flagged = train.tripId != null && train.tripId in flaggedTripIds,
                     seen = train.tripId != null && train.tripId in seenTrains,
                     delayConfirmCount = delayConfirmCount,
+                    occupancyLevel = train.tripId?.let { occupancy[it]?.level },
                     onClick = {
                         seenTrainsViewModel.markSeen(train.tripId)
                         onReportTrain(train.label, train.tripId, train.fromStop ?: train.toStop, train.mode, train.city)
@@ -546,11 +548,25 @@ private fun ActiveFilterBadges(modes: List<FeedMode>, modifier: Modifier = Modif
     }
 }
 
-/** A filter menu row showing a mode as its symbol (S/U/Tram/Bus) instead of text. */
+/** A filter menu row showing a mode as its symbol with its name. */
 @Composable
 private fun FilterModeItem(mode: String, selected: Boolean, onClick: () -> Unit) {
+    val label = stringResource(
+        when (mode) {
+            "METRO" -> R.string.label_sbahn
+            "SUBWAY" -> R.string.label_ubahn
+            "TRAM" -> R.string.label_tram
+            else -> R.string.label_bus
+        }
+    )
     DropdownMenuItem(
-        text = { ModeSymbol(mode) },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ModeSymbol(mode)
+                Spacer(Modifier.width(10.dp))
+                Text(label)
+            }
+        },
         onClick = onClick,
         trailingIcon = if (selected) {
             { Icon(Icons.Filled.Check, contentDescription = null) }
@@ -564,6 +580,8 @@ private fun TrainRow(
     flagged: Boolean,
     seen: Boolean,
     delayConfirmCount: Int = 0,
+    // How full it is (riders' votes, 1 to 5), null when fewer than two riders answered.
+    occupancyLevel: Int? = null,
     onClick: () -> Unit,
     onBuyTicket: () -> Unit
 ) {
@@ -610,6 +628,10 @@ private fun TrainRow(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    if (occupancyLevel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        com.mvvtracker.app.ui.components.OccupancyMeter(occupancyLevel, segmentWidth = 6.dp, height = 8.dp)
                     }
                 }
             }
@@ -733,7 +755,7 @@ private fun DisruptionsBanner(disruptions: List<com.mvvtracker.app.data.model.Di
  * drawn at its timetable position rather than where it actually is.
  */
 @Composable
-private fun DelayBadge(delayMinutes: Int?, isRealtime: Boolean) {
+internal fun DelayBadge(delayMinutes: Int?, isRealtime: Boolean) {
     data class Chip(val text: String, val bg: Color, val fg: Color)
     val chip = when {
         !isRealtime || delayMinutes == null -> Chip(

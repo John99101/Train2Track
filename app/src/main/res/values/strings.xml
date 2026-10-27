@@ -83,6 +83,37 @@
     <string name="delay_vote_no">On time</string>
     <string name="delay_vote_thanks_late">Thanks! You reported this train as late.</string>
     <string name="delay_vote_thanks_on_time">Thanks! You reported this train as on time.</string>
+    <!-- Stations tab -->
+    <string name="nav_stations">Stations</string>
+    <string name="stations_in_city">in %1$s</string>
+    <string name="stations_search_hint">Search a station</string>
+    <string name="stations_clear">Clear</string>
+    <string name="stations_recent">Recently opened</string>
+    <string name="stations_empty_hint">Search for a station to see its next departures.</string>
+    <string name="stations_no_results">No station found in %1$s.</string>
+    <string name="stations_error">Could not be loaded. Please check your connection.</string>
+    <string name="station_departures">Departures</string>
+    <string name="station_no_departures">No departures right now.</string>
+    <string name="station_platform">Platform %1$s</string>
+    <string name="station_now">now</string>
+    <string name="station_minutes">%1$d min</string>
+    <string name="station_cancelled">Cancelled</string>
+    <string name="station_updated">Updated %1$s</string>
+    <string name="station_retry">Try again</string>
+    <!-- How full is it? (occupancy vote, five levels) -->
+    <string name="occupancy_title">How full is it?</string>
+    <string name="occupancy_level_1">Many seats free</string>
+    <string name="occupancy_level_2">Seats free</string>
+    <string name="occupancy_level_3">Few seats</string>
+    <string name="occupancy_level_4">Standing only</string>
+    <string name="occupancy_level_5">Very full</string>
+    <string name="occupancy_submit">Submit</string>
+    <string name="occupancy_thanks">Thanks! You said: %1$s</string>
+    <string name="occupancy_meter_desc">Occupancy: %1$s</string>
+    <plurals name="occupancy_votes">
+        <item quantity="one">(%1$d rider)</item>
+        <item quantity="other">(%1$d riders)</item>
+    </plurals>
     <plurals name="delay_confirmed_count">
         <item quantity="one">%1$d confirms delay</item>
         <item quantity="other">%1$d confirm delay</item>

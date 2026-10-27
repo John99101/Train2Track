@@ -1,8 +1,8 @@
 /**
  * The names of report and delay vote documents.
  *
- * Every rider has at most one document per journey in `reports` and one in
- * `delay_reports`. Every app that shows the journey loads these documents, so
+ * Every rider has at most one document per journey in `reports`, one in
+ * `delay_reports` and one in `occupancy_votes` (hidden names only). Every app that shows the journey loads these documents, so
  * their name and content must not show who wrote them.
  *
  *  - Hidden name (apps from 0.5.0 on): the SHA-256 hash, as lowercase hex, of

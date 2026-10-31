@@ -54,7 +54,7 @@ the server.
 
 | | |
 |---|---|
-| **Map** | Every vehicle in view moves along its route. Tap one to open it. Filter buttons along the top choose the modes. |
+| **Map** | Every vehicle in view moves along its route. Tap one to open it. Filter buttons along the top choose the modes. The lines are drawn with their branches, and the Stations button puts the stations on the map; tap one for its departures. |
 | **Feed** | All lines of a city as a live list, with search and filters for S-Bahn, U-Bahn, tram, bus and rail. |
 | **Delays** | Shown per journey where the data sources provide live data. Otherwise the journey is marked as scheduled. |
 | **Disruptions** | Notices from open data, for the selected city. |

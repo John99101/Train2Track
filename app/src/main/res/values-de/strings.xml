@@ -45,6 +45,9 @@
         <item quantity="other">%1$d Bahnen · Livedaten verzögert</item>
     </plurals>
     <string name="map_loading">Bahnen werden geladen…</string>
+    <string name="map_stations">Stationen</string>
+    <string name="map_stations_zoom">Zoome näher heran, um die Stationen zu sehen.</string>
+    <string name="map_stations_unavailable">Die Stationen konnten nicht geladen werden.</string>
     <string name="map_attribution">© Mitwirkende von OpenStreetMap</string>
     <plurals name="map_reports_in_view">
         <item quantity="one">%1$d Meldung im Kartenausschnitt</item>

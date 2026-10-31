@@ -6,8 +6,10 @@ import MVVTrackerCore
 /// location, or whatever they picked in the Feed) showing every vehicle gliding
 /// along its track. Tapping a train opens the Report screen for it. A row of
 /// buttons along the top toggles which modes are shown; highlighted ones are on
-/// (S-Bahn and U-Bahn until the user picks). Port of `MapScreen.kt` (Apple Maps
-/// instead of OpenStreetMap).
+/// (S-Bahn and U-Bahn until the user picks). Below it the "Stations" button puts a
+/// dot on every station of the highlighted modes; a tap on a dot opens the
+/// station's departures. Port of `MapScreen.kt` (Apple Maps instead of
+/// OpenStreetMap).
 struct MapScreen: View {
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var citySelection: CitySelection
@@ -15,6 +17,10 @@ struct MapScreen: View {
     @StateObject private var vm = LiveMapViewModel()
     @StateObject private var reports = ReportCountsViewModel()
     @State private var selected: TrainPosition?
+    /// A station opened from its dot.
+    @State private var openStation: StationRef?
+    /// The map's width in degrees of longitude (which station dots the zoom allows).
+    @State private var longitudeSpan = 0.14
     // Mode filter: S-Bahn and U-Bahn until the user picks; buses and trams are
     // opt-in (they are numerous and were the main map performance cost). Kept in the
     // app wide FilterStore (and on the device), so it survives leaving the Map and restarts.
@@ -37,6 +43,12 @@ struct MapScreen: View {
         return vm.trains.filter { modes.contains($0.mode) }
     }
 
+    /// The map buttons whose stations get a dot; 0 while the "Stations" button is off.
+    private var stationBits: Int {
+        guard filterStore.mapStations else { return 0 }
+        return selectedModes.reduce(0) { $0 | $1.stationBit }
+    }
+
     /// The routes the map wants to draw (only for the lines actually shown).
     private var shownRouteKeys: Set<String> {
         Set(shownTrains.map { routeKey(mode: $0.mode, label: $0.label) })
@@ -52,14 +64,26 @@ struct MapScreen: View {
                 center: CLLocationCoordinate2D(latitude: citySelection.city.latitude,
                                                longitude: citySelection.city.longitude),
                 centerToken: citySelection.city.id,
-                onBoundsChange: { n, s, e, w in vm.updateBounds(north: n, south: s, east: e, west: w) },
-                onTrainTap: { selected = $0 }
+                onBoundsChange: { n, s, e, w in
+                    longitudeSpan = e - w
+                    vm.updateBounds(north: n, south: s, east: e, west: w)
+                },
+                onTrainTap: { selected = $0 },
+                stations: vm.stations.stations,
+                stationBits: stationBits,
+                onStationTap: { station in
+                    guard let city = vm.stations.cityId else { return }
+                    openStation = StationRef(id: station.id, name: station.name, cityId: city,
+                                             modes: MapGroups.modes(station.bits))
+                }
             )
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
                     modeChips
+                    stationsButton
                     statusBanner
+                    if let note = stationNote { noteBanner(note) }
                 }
             }
             .navigationTitle(loc.t("nav_map"))
@@ -67,25 +91,79 @@ struct MapScreen: View {
             .onAppear {
                 // Download only the vehicles of these modes (rail alone by default).
                 vm.showModes(shownModes)
+                vm.showStations(filterStore.mapStations)
                 vm.onAppear()
                 // Only the reports of what the map shows (set once the area is known).
                 reports.start(cities: vm.reportCities)
                 // Kick off the fetch right away for the city (the map refines the
-                // bounds once it has laid out).
-                let c = citySelection.city
-                vm.updateBounds(north: c.latitude + 0.10, south: c.latitude - 0.10,
-                                east: c.longitude + 0.16, west: c.longitude - 0.16)
+                // bounds once it has laid out). Not when coming back from a station or
+                // another tab: the map still shows its area and reports no change, so
+                // the estimate would hide the vehicles outside the middle and switch a
+                // city looked at back to the selected one.
+                if !vm.hasViewport {
+                    let c = citySelection.city
+                    vm.updateBounds(north: c.latitude + 0.10, south: c.latitude - 0.10,
+                                    east: c.longitude + 0.16, west: c.longitude - 0.16)
+                }
             }
             .onDisappear { vm.onDisappear(); reports.stop() }
             // Fetch full routes only for the lines currently shown (map driven).
             .onChange(of: shownRouteKeys) { _, keys in vm.ensureRoutes(keys) }
             .onChange(of: shownModes) { _, modes in vm.showModes(modes) }
+            .onChange(of: filterStore.mapStations) { _, on in vm.showStations(on) }
             .onChange(of: vm.reportCities) { _, cities in reports.start(cities: cities) }
             .sheet(item: $selected) { train in
                 ReportScreen(train: train, ticketURL: citySelection.city.ticketURL,
                              reportCity: vm.reportCity(for: train), reports: reports)
             }
+            .navigationDestination(item: $openStation) { StationScreen(station: $0) }
         }
+    }
+
+    /// The "Stations" button is on, but no dot can be shown: why.
+    private var stationNote: String? {
+        if stationBits == 0 { return nil }
+        if vm.stations.loaded && vm.stations.stations.isEmpty { return loc.t("map_stations_unavailable") }
+        if stationBits & ~stationMask(longitudeSpan: longitudeSpan) != 0 { return loc.t("map_stations_zoom") }
+        return nil
+    }
+
+    private func noteBanner(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote.weight(.medium))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+    }
+
+    /// Under the filter buttons: the stations of the highlighted modes, as dots.
+    private var stationsButton: some View {
+        let on = filterStore.mapStations
+        return Button {
+            filterStore.setMapStations(!on)
+        } label: {
+            HStack(spacing: 6) {
+                // The dot as it looks on the map, faded while off.
+                Circle()
+                    .fill(Color.white)
+                    .overlay(Circle().strokeBorder(Color(red: 60 / 255, green: 60 / 255, blue: 60 / 255), lineWidth: 2))
+                    .frame(width: 12, height: 12)
+                    .opacity(on ? 1 : 0.4)
+                Text(loc.t("map_stations"))
+                    .font(.subheadline.weight(on ? .semibold : .regular))
+                    .foregroundStyle(on ? Color.primary : Color.secondary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(on ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.regularMaterial),
+                        in: Capsule())
+            .overlay(Capsule().strokeBorder(on ? Color.accentColor : Color.secondary.opacity(0.35),
+                                            lineWidth: on ? 1.5 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
     }
 
     private var statusBanner: some View {
@@ -153,6 +231,17 @@ private enum MapMode: String, CaseIterable, Identifiable {
         case .tram: return ["TRAM"]
         case .bus: return ["BUS"]
         case .rail: return ["REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL"]
+        }
+    }
+
+    /// The stations the button shows when the "Stations" button is on.
+    var stationBit: Int {
+        switch self {
+        case .sbahn: return MapGroups.sbahn
+        case .ubahn: return MapGroups.ubahn
+        case .tram: return MapGroups.tram
+        case .bus: return MapGroups.bus
+        case .rail: return MapGroups.rail
         }
     }
 

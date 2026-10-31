@@ -4,6 +4,14 @@ import XCTest
 /// Port of Android's `MapStyleTest.kt` (badge size and draw order on the map).
 final class MapStyleTests: XCTestCase {
 
+    func testStationDotsFollowTheVisibleWidth() {
+        let rail = MapGroups.sbahn | MapGroups.ubahn | MapGroups.rail
+        XCTAssertEqual(0, stationMask(longitudeSpan: 0.6))
+        XCTAssertEqual(rail, stationMask(longitudeSpan: 0.3))
+        XCTAssertEqual(rail | MapGroups.tram, stationMask(longitudeSpan: 0.1))
+        XCTAssertEqual(rail | MapGroups.tram | MapGroups.bus, stationMask(longitudeSpan: 0.05))
+    }
+
     func testBadgeSizeFollowsTheVisibleWidth() {
         XCTAssertEqual(.near, badgeTier(longitudeSpan: 0.05))
         XCTAssertEqual(.near, badgeTier(longitudeSpan: 0.131))

@@ -1,8 +1,9 @@
 import Foundation
 
 /// Which CDN addresses the apps take for the live data (Firestore config/app, text
-/// field liveCdn). Only https addresses under example.invalid or KeyCDN's test domain
-/// kxcdn.com, so a typing error in the console cannot send the apps anywhere else.
+/// field liveCdn). Only https addresses under example.invalid (the CDN's name for the
+/// app is api.example.invalid), so a typing error in the console cannot send the apps
+/// anywhere else, nor to a provider the privacy policy does not name.
 /// Mirror of Android's `LiveHost.parse`.
 public enum LiveHostRule {
     public static let field = "liveCdn"
@@ -13,7 +14,7 @@ public enum LiveHostRule {
         guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty,
               let url = URL(string: text), url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased() else { return nil }
-        let allowed = host == "example.invalid" || host.hasSuffix(".example.invalid") || host.hasSuffix(".kxcdn.com")
+        let allowed = host == "example.invalid" || host.hasSuffix(".example.invalid")
         return allowed ? url : nil
     }
 

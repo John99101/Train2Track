@@ -41,15 +41,15 @@ object LiveHost {
     }
 
     /**
-     * Only https addresses under example.invalid (the CDN's own name for the app) or
-     * KeyCDN's test domain kxcdn.com are taken, so a typing error in the console
-     * cannot send the apps anywhere else.
+     * Only https addresses under example.invalid (the CDN's name for the app is
+     * api.example.invalid) are taken, so a typing error in the console cannot send
+     * the apps anywhere else, nor to a provider the privacy policy does not name.
      */
     fun parse(value: String?): HttpUrl? {
         val url = value?.trim()?.toHttpUrlOrNull() ?: return null
         if (!url.isHttps) return null
         val host = url.host
-        val allowed = host == "example.invalid" || host.endsWith(".example.invalid") || host.endsWith(".kxcdn.com")
+        val allowed = host == "example.invalid" || host.endsWith(".example.invalid")
         return url.takeIf { allowed }
     }
 

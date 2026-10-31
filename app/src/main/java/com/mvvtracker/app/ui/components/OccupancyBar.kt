@@ -1,6 +1,7 @@
 package com.mvvtracker.app.ui.components
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,14 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -77,37 +81,56 @@ fun OccupancyMeter(level: Int, modifier: Modifier = Modifier, segmentWidth: Dp =
 
 /**
  * The bar to pull in the report window: five stops from green (many seats free) to
- * red (very full). Pulling only moves the knob; the card's Submit button sends it.
- * Read out with the level's name.
+ * red (very full), with a round knob in the level's colour, as on iOS. Pulling only
+ * moves the knob; the card's Submit button sends it. Read out with the level's name.
+ *
+ * The slider's own thumb and track are replaced: the slider lays the track out so
+ * that the knob's centre runs exactly from its start to its end, so the knob never
+ * leaves the bar. Dots mark only the inner stops (2, 3 and 4).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OccupancySlider(level: Int, onLevelChange: (Int) -> Unit, modifier: Modifier = Modifier) {
     val label = stringResource(occupancyLabelRes(level))
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        // The colour scale under the knob (the slider's own track is see-through).
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp)
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(Brush.horizontalGradient(OCCUPANCY_COLORS))
-        )
-        Slider(
-            value = level.toFloat(),
-            onValueChange = { onLevelChange(it.roundToInt().coerceIn(1, OCCUPANCY_COLORS.size)) },
-            valueRange = 1f..OCCUPANCY_COLORS.size.toFloat(),
-            steps = OCCUPANCY_COLORS.size - 2,
-            colors = SliderDefaults.colors(
-                thumbColor = occupancyColor(level),
-                activeTrackColor = Color.Transparent,
-                inactiveTrackColor = Color.Transparent,
-                activeTickColor = Color.White.copy(alpha = 0.85f),
-                inactiveTickColor = Color.White.copy(alpha = 0.85f)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { stateDescription = label }
-        )
-    }
+    val count = OCCUPANCY_COLORS.size
+    val knobColor = occupancyColor(level)
+    Slider(
+        value = level.toFloat(),
+        onValueChange = { onLevelChange(it.roundToInt().coerceIn(1, count)) },
+        valueRange = 1f..count.toFloat(),
+        steps = count - 2,
+        thumb = {
+            Box(
+                Modifier
+                    .size(OCCUPANCY_KNOB)
+                    .shadow(2.dp, CircleShape)
+                    .background(Color.White, CircleShape)
+                    .padding(3.dp)
+                    .background(knobColor, CircleShape)
+            )
+        },
+        track = {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+            ) {
+                val r = size.height / 2
+                drawRoundRect(Brush.horizontalGradient(OCCUPANCY_COLORS), cornerRadius = CornerRadius(r, r))
+                for (i in 1 until count - 1) {
+                    drawCircle(
+                        Color.White.copy(alpha = 0.85f),
+                        radius = 2.dp.toPx(),
+                        center = Offset(size.width * i / (count - 1), r)
+                    )
+                }
+            }
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { stateDescription = label }
+    )
 }
+
+/** Size of the knob; the bar starts and ends under its centre. */
+val OCCUPANCY_KNOB = 24.dp

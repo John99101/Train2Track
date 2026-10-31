@@ -51,6 +51,7 @@ import com.mvvtracker.app.R
 import com.mvvtracker.app.data.model.MovementType
 import com.mvvtracker.app.data.repository.ReportAggregation
 import com.mvvtracker.app.ui.components.ModeSymbol
+import com.mvvtracker.app.ui.components.OCCUPANCY_KNOB
 import com.mvvtracker.app.ui.components.OccupancyMeter
 import com.mvvtracker.app.ui.components.OccupancySlider
 import com.mvvtracker.app.ui.components.occupancyLabelRes
@@ -252,6 +253,7 @@ fun ReportEventScreen(
                         city = city
                     )
                 },
+                enabled = submitState !is ReportSubmitState.Submitting,
                 modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 12.dp)
             ) {
                 Text(stringResource(R.string.report_submit))
@@ -306,7 +308,8 @@ fun ReportEventScreen(
                         stringResource(occupancyLabelRes(shownLevel)),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 10.dp)
+                        // Under the bar's start (the knob's centre at level 1).
+                        modifier = Modifier.padding(start = OCCUPANCY_KNOB / 2)
                     )
                 }
                 Spacer(Modifier.width(10.dp))

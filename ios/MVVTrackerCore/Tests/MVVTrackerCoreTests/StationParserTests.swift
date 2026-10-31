@@ -33,6 +33,22 @@ final class StationParserTests: XCTestCase {
         XCTAssertTrue(board.departures[1].cancelled)
     }
 
+    func testMapStations() throws {
+        let json = #"""
+        {"v":1,"city":"muenchen","complete":false,"stations":[
+          ["Marienplatz",48.13706,11.57539,3,"de-DELFI_de:09162:2"],
+          ["Kein Knopf",48.1,11.5,0,"x1"],
+          ["",48.1,11.5,8,"x2"]]}
+        """#
+        let parsed = try StationParser.mapStations(Data(json.utf8))
+        XCTAssertFalse(parsed.complete)
+        XCTAssertEqual(parsed.stations, [MapStation(id: "de-DELFI_de:09162:2", name: "Marienplatz",
+                                                    lat: 48.13706, lon: 11.57539, bits: 3)])
+        XCTAssertEqual(MapGroups.modes(3), ["SUBURBAN", "SUBWAY"])
+        XCTAssertEqual(StationRef(id: "a", name: "b", cityId: "c", modes: MapGroups.modes(1 | 8 | 16)).symbolModes,
+                       ["METRO", "BUS", "REGIONAL_RAIL"])
+    }
+
     func testEmptyBoard() throws {
         let board = try StationParser.board(Data(#"{"t":1,"name":"X","deps":[]}"#.utf8), nowMs: 0)
         XCTAssertEqual(board.name, "X")

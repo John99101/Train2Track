@@ -59,6 +59,8 @@ class ReportViewModel @Inject constructor(
             _submitState.value = ReportSubmitState.Error("Open a train from the map or feed first.")
             return
         }
+        // One at a time: a double tap would add a second row to the statistics.
+        if (_submitState.value is ReportSubmitState.Submitting) return
         // The city the train was seen in; every app only loads its own cities' reports.
         val reportCity = city?.takeIf { it.isNotBlank() } ?: CITY_OTHER
         viewModelScope.launch {

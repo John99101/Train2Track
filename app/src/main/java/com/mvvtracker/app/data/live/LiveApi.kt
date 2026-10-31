@@ -41,8 +41,12 @@ interface LiveApiService {
 
 /** Separate service with a long timeout: the first request for a city builds its routes. */
 interface LiveRoutesService {
+    /**
+     * The city's route set. With the ETag of the saved copy the server answers
+     * 304 without a body when nothing changed.
+     */
     @GET("api/routes/{city}")
-    suspend fun routes(@Path("city") cityId: String): RoutesDto
+    suspend fun routes(@Path("city") cityId: String, @Header("If-None-Match") etag: String? = null): Response<RoutesDto>
 
     /**
      * The route of one line the city's set does not have yet (a long distance
@@ -102,7 +106,8 @@ data class RouteDto(
 /**
  * One vehicle on one hop: from [fromName] to [toName] between [departureMs] and
  * [arrivalMs]. Its geometry lives in [ShapeStore] under [shapeKey]; when that is
- * not known yet the vehicle moves on a straight line between the two stops.
+ * not known yet the vehicle moves on a straight line between the two stops. From
+ * [standFromMs] until it leaves it stands at [fromName] (see [LiveMotion]).
  */
 data class LiveSegment(
     val tripId: String?,
@@ -119,7 +124,8 @@ data class LiveSegment(
     val arrivalMs: Long,
     val delayMinutes: Int?,
     val isRealtime: Boolean,
-    val shapeKey: String
+    val shapeKey: String,
+    val standFromMs: Long = departureMs
 ) {
     val hasStopCoordinates: Boolean
         get() = !fromLat.isNaN() && !fromLon.isNaN() && !toLat.isNaN() && !toLon.isNaN()

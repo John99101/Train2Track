@@ -26,8 +26,8 @@ android {
         applicationId = "com.mvvtracker.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.6.0"
+        versionCode = 19
+        versionName = "0.6.2"
 
         // Live map data source: transitous (open MOTIS instance, no API key).
         // /api/v1/map/trips returns active trip segments (S-Bahn/U-Bahn/regional/

@@ -163,6 +163,9 @@
 "settings_delete_done" = "Your data has been deleted.";
 "settings_delete_failed" = "Deleting on the server failed. Please try again or contact us by mail.";
 "map_loading" = "Loading live trains…";
+"map_stations" = "Stations";
+"map_stations_zoom" = "Zoom in to see the stations.";
+"map_stations_unavailable" = "The stations could not be loaded.";
 "report_subtitle" = "Share live information with other riders.";
 
 /* Admin console (only with the admin claim) */

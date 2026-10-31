@@ -52,6 +52,8 @@ final class ReportViewModel: ObservableObject {
             state = .error(LocalizationManager.shared.t("report_no_train"))
             return
         }
+        // One at a time: a double tap would add a second row to the statistics.
+        if case .submitting = state { return }
         state = .submitting
         Task {
             do {

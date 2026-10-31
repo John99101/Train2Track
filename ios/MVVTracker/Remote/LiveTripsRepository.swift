@@ -180,7 +180,8 @@ actor LiveTripsRepository {
         }
         let api = live
         let cityId = city.id
-        let answers = try await withThrowingTaskGroup(of: (LiveGroup, LiveApiClient.GroupAnswer).self) { tasks in
+        let answers = try await withThrowingTaskGroup(of: (LiveGroup, LiveApiClient.GroupAnswer).self,
+                                                      returning: [(LiveGroup, LiveApiClient.GroupAnswer)].self) { tasks in
             for g in due {
                 let etag = etags[g]
                 tasks.addTask {

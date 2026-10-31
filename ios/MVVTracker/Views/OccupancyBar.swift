@@ -57,7 +57,8 @@ struct OccupancySlider: View {
                     .fill(LinearGradient(colors: Occupancy.colors, startPoint: .leading, endPoint: .trailing))
                     .frame(height: 8)
                     .padding(.horizontal, knob / 2)
-                ForEach(0..<count, id: \.self) { i in
+                // Dots only at the inner stops (2, 3 and 4), as on Android.
+                ForEach(1..<(count - 1), id: \.self) { i in
                     Circle()
                         .fill(Color.white.opacity(0.85))
                         .frame(width: 4, height: 4)
@@ -80,6 +81,11 @@ struct OccupancySlider: View {
                     level = min(max(stop, 1), count)
                 }
             )
+            // A tap jumps to the nearest stop, as on Android.
+            .onTapGesture { location in
+                let stop = Int(((location.x - knob / 2) / step).rounded()) + 1
+                level = min(max(stop, 1), count)
+            }
         }
         .frame(height: 34)
         .accessibilityElement()

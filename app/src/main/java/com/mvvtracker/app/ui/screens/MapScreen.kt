@@ -1,13 +1,18 @@
 package com.mvvtracker.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +32,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mvvtracker.app.R
 import com.mvvtracker.app.data.local.FilterStore
+import com.mvvtracker.app.data.station.MapGroups
+import com.mvvtracker.app.data.station.StationRef
 import com.mvvtracker.app.ui.components.ModeSymbol
 import com.mvvtracker.app.ui.components.SuggestCityFromLocation
 import com.mvvtracker.app.viewmodel.CitySelectionViewModel
@@ -34,28 +42,34 @@ import com.mvvtracker.app.viewmodel.FiltersViewModel
 import com.mvvtracker.app.viewmodel.LiveMapViewModel
 import com.mvvtracker.app.viewmodel.SettingsViewModel
 
-/** Map mode categories the filter buttons toggle; [symbol] is the mode its button shows. */
-private enum class MapMode(val motisModes: Set<String>, val labelRes: Int, val symbol: String) {
-    SBAHN(setOf("METRO"), R.string.label_sbahn, "METRO"),
-    UBAHN(setOf("SUBWAY"), R.string.label_ubahn, "SUBWAY"),
-    TRAM(setOf("TRAM"), R.string.label_tram, "TRAM"),
-    BUS(setOf("BUS"), R.string.label_bus, "BUS"),
+/**
+ * Map mode categories the filter buttons toggle; [symbol] is the mode its button
+ * shows, [stationBit] the stations it shows when the "Stations" button is on.
+ */
+private enum class MapMode(val motisModes: Set<String>, val labelRes: Int, val symbol: String, val stationBit: Int) {
+    SBAHN(setOf("METRO"), R.string.label_sbahn, "METRO", MapGroups.SBAHN),
+    UBAHN(setOf("SUBWAY"), R.string.label_ubahn, "SUBWAY", MapGroups.UBAHN),
+    TRAM(setOf("TRAM"), R.string.label_tram, "TRAM", MapGroups.TRAM),
+    BUS(setOf("BUS"), R.string.label_bus, "BUS", MapGroups.BUS),
     RAIL(
         setOf("REGIONAL_RAIL", "REGIONAL_FAST_RAIL", "HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "RAIL"),
         R.string.map_other_rail,
-        "REGIONAL_RAIL"
+        "REGIONAL_RAIL",
+        MapGroups.RAIL
     )
 }
 
-/** Room the filter buttons take at the top of the map; the notes of the map start below. */
-private val FILTER_ROW_HEIGHT = 56.dp
+/** Room the two rows of buttons take at the top of the map; the notes of the map start below. */
+private val FILTER_ROWS_HEIGHT = 96.dp
 
 /**
  * The Map tab: a live OpenStreetMap centered on the selected city (from the user's
  * location, or whatever they picked in the Feed) showing every train. Tapping a
  * train opens the Report screen for it. A row of buttons at the top toggles which
  * modes are shown: S-Bahn, U-Bahn, Tram, Bus, other trains. Highlighted buttons are
- * shown; S-Bahn and U-Bahn until the user picks.
+ * shown; S-Bahn and U-Bahn until the user picks. Below it the "Stations" button
+ * puts a dot on every station of the highlighted modes; a tap on a dot opens the
+ * station's departures.
  */
 @Composable
 fun MapScreen(
@@ -65,7 +79,8 @@ fun MapScreen(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     filtersViewModel: FiltersViewModel = hiltViewModel(),
     onTrainClick: (line: String, tripId: String?, station: String?, mode: String?, city: String) -> Unit =
-        { _, _, _, _, _ -> }
+        { _, _, _, _, _ -> },
+    onStationClick: (StationRef) -> Unit = {}
 ) {
     // Trains a rider has reported: the map marks them with a "!" corner badge.
     val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
@@ -93,6 +108,11 @@ fun MapScreen(
     // Download only the vehicles of these modes (rail alone by default).
     LaunchedEffect(modeFilter) { liveViewModel.showModes(modeFilter) }
 
+    // Station dots: only while the button is on, only of the highlighted modes.
+    val stationsOn = filters.mapStations
+    LaunchedEffect(stationsOn) { liveViewModel.showStations(stationsOn) }
+    val stationBits = if (stationsOn) selectedModes.fold(0) { bits, m -> bits or m.stationBit } else 0
+
     Box(modifier = Modifier.fillMaxSize()) {
         LiveTrainMap(
             liveViewModel = liveViewModel,
@@ -102,52 +122,89 @@ fun MapScreen(
             flaggedTripIds = flaggedTripIds,
             showUserLocation = preciseLocation,
             onTrainClick = onTrainClick,
-            topInset = FILTER_ROW_HEIGHT,
+            topInset = FILTER_ROWS_HEIGHT,
+            stationBits = stationBits,
+            onStationClick = { station, cityId ->
+                onStationClick(StationRef(station.id, station.name, cityId, MapGroups.modes(station.bits)))
+            },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Filter buttons along the top: a highlighted button shows its vehicles, a
-        // tap switches it on or off. Scrolls sideways on narrow screens.
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            MapMode.entries.forEach { m ->
-                val on = m in selectedModes
-                FilterChip(
-                    selected = on,
-                    onClick = {
-                        val modes = if (on) selectedModes - m else selectedModes + m
-                        filtersViewModel.setMapModes(modes.mapTo(HashSet()) { it.name })
-                    },
-                    label = {
-                        Text(
-                            stringResource(m.labelRes),
-                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal
-                        )
-                    },
-                    // A faded symbol on a button that is off, so the state does not rest on colour alone.
-                    leadingIcon = { ModeSymbol(m.symbol, size = 18.dp, modifier = Modifier.alpha(if (on) 1f else 0.4f)) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = on,
-                        borderColor = MaterialTheme.colorScheme.outlineVariant,
-                        selectedBorderColor = MaterialTheme.colorScheme.primary,
-                        selectedBorderWidth = 1.5.dp
-                    ),
-                    elevation = FilterChipDefaults.filterChipElevation(elevation = 2.dp)
-                )
+        Column(modifier = Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+            // Filter buttons along the top: a highlighted button shows its vehicles, a
+            // tap switches it on or off. Scrolls sideways on narrow screens.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MapMode.entries.forEach { m ->
+                    val on = m in selectedModes
+                    MapButton(
+                        on = on,
+                        label = stringResource(m.labelRes),
+                        onClick = {
+                            val modes = if (on) selectedModes - m else selectedModes + m
+                            filtersViewModel.setMapModes(modes.mapTo(HashSet()) { it.name })
+                        },
+                        // A faded symbol on a button that is off, so the state does not rest on colour alone.
+                        icon = { ModeSymbol(m.symbol, size = 18.dp, modifier = Modifier.alpha(if (on) 1f else 0.4f)) }
+                    )
+                }
             }
+            // Under the filter buttons: the stations of the highlighted modes.
+            MapButton(
+                on = stationsOn,
+                label = stringResource(R.string.map_stations),
+                onClick = { filtersViewModel.setMapStations(!stationsOn) },
+                icon = { StationDotSymbol(Modifier.alpha(if (stationsOn) 1f else 0.4f)) },
+                modifier = Modifier.padding(start = 12.dp)
+            )
         }
     }
+}
+
+/** One of the map's switch buttons: highlighted while [on]. */
+@Composable
+private fun MapButton(
+    on: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = on,
+        onClick = onClick,
+        label = { Text(label, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) },
+        leadingIcon = icon,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = on,
+            borderColor = MaterialTheme.colorScheme.outlineVariant,
+            selectedBorderColor = MaterialTheme.colorScheme.primary,
+            selectedBorderWidth = 1.5.dp
+        ),
+        elevation = FilterChipDefaults.filterChipElevation(elevation = 2.dp),
+        modifier = modifier
+    )
+}
+
+/** The station dot as it looks on the map, for the "Stations" button. */
+@Composable
+private fun StationDotSymbol(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(12.dp)
+            .background(Color.White, CircleShape)
+            .border(2.dp, Color(STATION_RING_ARGB), CircleShape)
+    )
 }

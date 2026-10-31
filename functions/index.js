@@ -25,6 +25,7 @@ const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestor
 const GtfsRealtimeBindings = require("gtfs-realtime-bindings");
 const { CITIES } = require("./lib/cities");
 const { createApi, rebuildCityRoutes } = require("./lib/liveApi");
+const { USER_AGENT } = require("./lib/transitous");
 const { isStaleAnonymous } = require("./lib/accounts");
 const { CITY_UNKNOWN, onlyServerFieldsChanged, sameValue } = require("./lib/reportFields");
 const { ADMIN_UIDS, syncAdminClaims } = require("./lib/admins");
@@ -86,10 +87,17 @@ exports.api = onRequest(
  */
 async function refreshAllRoutes({ full }) {
   const result = {};
-  for (const city of Object.keys(CITIES).filter((c) => !CITIES[c].hidden)) {
+  const cities = Object.keys(CITIES).filter((c) => !CITIES[c].hidden);
+  // Each city gets its share of the run's time (more when the ones before were
+  // quick); what does not fit is done in the next run.
+  const end = Date.now() + ROUTES_RUN_MS;
+  for (let i = 0; i < cities.length; i++) {
+    const city = cities[i];
+    const share = (end - Date.now()) / (cities.length - i);
+    const deadlineMs = Date.now() + Math.max(ROUTES_CITY_MIN_MS, Math.min(share, ROUTES_CITY_MAX_MS));
     try {
-      const { rows, asked } = await rebuildCityRoutes(db, city, { full });
-      result[city] = { lines: rows.length, asked };
+      const { rows, asked, complete } = await rebuildCityRoutes(db, city, { full, deadlineMs });
+      result[city] = { lines: rows.length, asked, complete };
     } catch (e) {
       logger.warn(`routes ${city} failed: ${e.message}`);
       result[city] = `error: ${e.message}`;
@@ -99,15 +107,23 @@ async function refreshAllRoutes({ full }) {
   return result;
 }
 
+// A route run may use this long (the function has 540 s); one city at least the
+// minimum and at most the maximum of it.
+const ROUTES_RUN_MS = 480 * 1000;
+const ROUTES_CITY_MIN_MS = 15 * 1000;
+const ROUTES_CITY_MAX_MS = 150 * 1000;
+
 /**
- * Once a week, on Monday at a busy time of day so (almost) every line is running:
- * add the lines the route sets do not have yet. Routes the server already has
- * are kept and not asked again, so this costs transitous a handful of requests
- * instead of thousands. A line that only runs at other times is added when an
- * app first needs it (GET /api/route/..., see lib/liveApi.js).
+ * Every day at a busy time, so (almost) every line and branch is running: add
+ * the lines the route sets do not have yet, the parts of lines where a vehicle
+ * runs off its drawn line (a branch), and the stations of lines whose stations
+ * were not collected yet. A line that is complete is not asked again, so a run
+ * costs transitous a handful of requests instead of thousands. A line that only
+ * runs at other times is added when an app first needs it (GET /api/route/...,
+ * see lib/liveApi.js).
  */
 exports.refreshRoutes = onSchedule(
-  { schedule: "30 8 * * 1", timeZone: "Europe/Berlin", timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "30 8 * * *", timeZone: "Europe/Berlin", timeoutSeconds: 540, memory: "512MiB" },
   () => refreshAllRoutes({ full: false })
 );
 
@@ -127,14 +143,37 @@ exports.rebuildRoutes = onCall({ ...CALLABLE, timeoutSeconds: 540, memory: "512M
 /** Records one write for [uid] and says whether it is over the limit (lib/limits.js). */
 async function overLimit(uid, kind) {
   const ref = db.collection("rate_limits").doc(uid);
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const now = Date.now();
-    const stamps = ((snap.exists && snap.get(kind)) || []).filter((t) => now - t < HOUR);
-    stamps.push(now);
-    tx.set(ref, { [kind]: stamps, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return LIMITS[kind].some(({ windowMs, max }) => stamps.filter((t) => now - t < windowMs).length > max);
-  });
+  // Enough times to judge the widest window; more would only grow the document.
+  const keep = Math.max(...LIMITS[kind].map((l) => l.max)) + 1;
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const now = Date.now();
+      const stamps = ((snap.exists && snap.get(kind)) || []).filter((t) => now - t < HOUR);
+      stamps.push(now);
+      tx.set(ref, { [kind]: stamps.slice(-keep), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return LIMITS[kind].some(({ windowMs, max }) => stamps.filter((t) => now - t < windowMs).length > max);
+    });
+  } catch (e) {
+    // The count failed (many writes of one rider at once make the transactions
+    // collide): count it as over the limit instead of letting a spam wave through.
+    logger.warn(`spam limit ${kind}: ${e.message}`);
+    return true;
+  }
+}
+
+/** Updates every document of [refs] in batches of 400; one deleted meanwhile does not stop the others. */
+async function updateAll(refs, data) {
+  for (let i = 0; i < refs.length; i += 400) {
+    const chunk = refs.slice(i, i + 400);
+    const batch = db.batch();
+    chunk.forEach((r) => batch.update(r, data));
+    try {
+      await batch.commit();
+    } catch (e) {
+      await Promise.all(chunk.map((r) => r.update(data).catch(() => {})));
+    }
+  }
 }
 
 /** The owner note of a report or delay vote: which rider it belongs to. */
@@ -231,19 +270,18 @@ exports.moderateTrip = onCall(CALLABLE, async (request) => {
   }
   const snap = await db.collection("reports").where("tripId", "==", tripId).get();
   const modRef = db.collection("trip_moderation").doc(tripKey(tripId));
-  const batch = db.batch();
   const flags =
     action === "verify" ? { verified: true, dismissed: false }
       : action === "dismiss" ? { verified: false, dismissed: true }
         : { verified: false, dismissed: false };
-  snap.docs.forEach((d) => batch.update(d.ref, { ...flags, moderatedAt: FieldValue.serverTimestamp() }));
+  // In batches: a spam wave on one train can be more than one batch (500) holds.
+  await updateAll(snap.docs.map((d) => d.ref), { ...flags, moderatedAt: FieldValue.serverTimestamp() });
   if (action === "dismiss") {
     const uids = await reportOwnerUids(snap.docs);
-    batch.set(modRef, { tripId, dismissedUids: uids, dismissedAt: FieldValue.serverTimestamp() });
+    await modRef.set({ tripId, dismissedUids: uids, dismissedAt: FieldValue.serverTimestamp() });
   } else if (action === "restore") {
-    batch.delete(modRef);
+    await modRef.delete();
   }
-  await batch.commit();
   logger.info(`moderateTrip ${action} ${tripId}: ${snap.size} reports`);
   return { ok: true, reports: snap.size };
 });
@@ -269,7 +307,10 @@ const sameAlert = (prev, next) =>
 exports.refreshDisruptions = onSchedule(
   { schedule: "every 10 minutes", timeoutSeconds: 120, memory: "512MiB" },
   async () => {
-    const res = await fetch(GTFS_DE_FREE_URL);
+    const res = await fetch(GTFS_DE_FREE_URL, {
+      signal: AbortSignal.timeout(60 * 1000),
+      headers: { "User-Agent": USER_AGENT },
+    });
     if (!res.ok) throw new Error(`gtfs.de HTTP ${res.status}`);
     const buffer = new Uint8Array(await res.arrayBuffer());
     const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
@@ -328,6 +369,12 @@ exports.refreshDisruptions = onSchedule(
     const col = db.collection("disruptions");
     const existing = await col.get();
     const old = new Map(existing.docs.map((d) => [d.id, d.data()]));
+    // An empty feed while notices exist is more likely a fault at gtfs.de than a
+    // country without a single disruption: keep the notices until the next run.
+    if (!alerts.length && existing.size) {
+      logger.warn("disruptions: empty feed, the existing notices are kept");
+      return;
+    }
     const keep = new Set(alerts.map((a) => a.id));
     const batch = db.batch();
     let pruned = 0;

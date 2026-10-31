@@ -51,6 +51,24 @@ public struct Departure: Equatable, Identifiable, Sendable {
     public var delayMinutes: Int { max(0, Int((expectedAtMs - plannedAtMs) / 60_000)) }
 }
 
+/// A station dot on the map ("Stations" button). Port of Android's `MapStation`.
+public struct MapStation: Equatable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let lat: Double
+    public let lon: Double
+    /// The map buttons of the lines that stop here (`MapGroups`).
+    public let bits: Int
+
+    public init(id: String, name: String, lat: Double, lon: Double, bits: Int) {
+        self.id = id
+        self.name = name
+        self.lat = lat
+        self.lon = lon
+        self.bits = bits
+    }
+}
+
 /// One station's board.
 public struct StationBoard: Equatable, Sendable {
     public let name: String
@@ -80,6 +98,21 @@ public enum StationParser {
             let modes = (row.count > 2 ? row[2] as? String : nil)?.split(separator: ",").map(String.init) ?? []
             return StationRef(id: id, name: name, cityId: cityId, modes: modes)
         }
+    }
+
+    /// `{ complete, stations: [[name, lat, lon, bits, id]] }` (GET /api/stops/{city}, or
+    /// the copy shipped with the app): the station dots and whether the server's list
+    /// is complete (when not, the app asks again sooner).
+    public static func mapStations(_ data: Data) throws -> (stations: [MapStation], complete: Bool) {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = json["stations"] as? [[Any]] else { throw URLError(.cannotParseResponse) }
+        let stations: [MapStation] = rows.compactMap { row in
+            guard row.count >= 5, let name = row[0] as? String, let lat = (row[1] as? NSNumber)?.doubleValue,
+                  let lon = (row[2] as? NSNumber)?.doubleValue, let bits = (row[3] as? NSNumber)?.intValue,
+                  let id = row[4] as? String, !name.isEmpty, !id.isEmpty, bits != 0 else { return nil }
+            return MapStation(id: id, name: name, lat: lat, lon: lon, bits: bits)
+        }
+        return (stations, json["complete"] as? Bool ?? true)
     }
 
     /// `{ t, name, deps: [[label, mode, colour, destination, planned, expected, platform, flags, tripId]] }`

@@ -80,15 +80,14 @@ public func cityForBox(north: Double, south: Double, east: Double, west: Double)
 }
 
 /// The city the map shows. Normally the one whose region fully contains the visible
-/// box (`cityForBox`). A box too large to fit into any region (the map is zoomed
-/// out) still belongs to the city its centre lies in: zooming out then keeps that
-/// city's vehicles and route lines, and the app does not have to ask the timetable
-/// service itself. nil when the map shows an area outside the cities.
+/// box (`cityForBox`). A box that sticks out of every region (the map is zoomed out,
+/// or moved towards the edge of the network) still belongs to the city its centre
+/// lies in: the city's vehicles and route lines stay while the city is on screen, and
+/// the app does not have to ask the timetable service itself. Only a view whose
+/// centre is outside every region is a free map area; nil then.
 /// Port of `cityForView`.
 public func cityForView(north: Double, south: Double, east: Double, west: Double) -> GermanCity? {
     if let city = cityForBox(north: north, south: south, east: east, west: west) { return city }
-    let largerThanARegion = north - south > 2 * cityHalfLat || east - west > 2 * cityHalfLon
-    if !largerThanARegion { return nil }
     let cLat = (north + south) / 2.0
     let cLon = (east + west) / 2.0
     var best: GermanCity?

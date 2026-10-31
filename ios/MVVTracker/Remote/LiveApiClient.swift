@@ -57,10 +57,33 @@ struct LiveApiClient {
         try LiveSnapshot.parseShapes(try await get("shapes/\(cityId)", timeout: 15))
     }
 
-    /// `GET /api/routes/{city}` → rows `[label, mode, colour, polyline5]`. The first
-    /// request for a city builds its routes on the server and may take a minute.
-    func routes(_ cityId: String) async throws -> [[String]] {
-        try LiveSnapshot.parseRoutes(try await get("routes/\(cityId)", timeout: 70))
+    /// What `routes` got back.
+    enum RoutesAnswer: Sendable {
+        /// The set, rows `[label, mode, colour, piece, piece...]`, and its ETag.
+        case data([[String]], etag: String?)
+        /// 304: the set has not changed since the one with the ETag that was sent.
+        case notModified
+    }
+
+    /// `GET /api/routes/{city}`. With the ETag of the copy on the phone the server
+    /// answers 304 without a body when nothing changed. The first request for a city
+    /// builds its routes on the server and may take a minute.
+    func routes(_ cityId: String, etag: String?) async throws -> RoutesAnswer {
+        var request = URLRequest(url: Self.baseURL.appendingPathComponent("routes/\(cityId)"))
+        request.timeoutInterval = 70
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        switch http.statusCode {
+        case 304:
+            return .notModified
+        case 200...299:
+            return .data(try LiveSnapshot.parseRoutes(data), etag: http.value(forHTTPHeaderField: "ETag"))
+        default:
+            throw URLError(.badServerResponse)
+        }
     }
 
     /// `GET /api/route/{city}/{mode}/{label}/{trip}` → one row `[label, mode, colour,

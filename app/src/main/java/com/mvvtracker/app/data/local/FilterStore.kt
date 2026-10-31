@@ -29,6 +29,8 @@ class FilterStore @Inject constructor(
         val feedLineCity: String? = null,
         /** Modes shown on the Map by name; null = the default selection (S-Bahn and U-Bahn). */
         val mapModes: Set<String>? = null,
+        /** The Map's "Stations" button: dots for the stations of the shown modes. Off until switched on. */
+        val mapStations: Boolean = false,
         /** The city shown last (the user's location may still replace it at start). */
         val cityId: String? = null
     ) {
@@ -45,6 +47,7 @@ class FilterStore @Inject constructor(
             feedLine = prefs.getString(KEY_FEED_LINE, null),
             feedLineCity = prefs.getString(KEY_FEED_LINE_CITY, null),
             mapModes = prefs.getStringSet(KEY_MAP_MODES, null)?.toSet(),
+            mapStations = prefs.getBoolean(KEY_MAP_STATIONS, false),
             cityId = prefs.getString(KEY_CITY, null)
         )
     )
@@ -70,6 +73,11 @@ class FilterStore @Inject constructor(
         prefs.edit().putStringSet(KEY_MAP_MODES, HashSet(names)).apply()
     }
 
+    fun setMapStations(on: Boolean) {
+        _filters.value = _filters.value.copy(mapStations = on)
+        prefs.edit().putBoolean(KEY_MAP_STATIONS, on).apply()
+    }
+
     fun setCity(cityId: String) {
         if (_filters.value.cityId == cityId) return
         _filters.value = _filters.value.copy(cityId = cityId)
@@ -90,6 +98,7 @@ class FilterStore @Inject constructor(
         private const val KEY_FEED_LINE = "feed_line"
         private const val KEY_FEED_LINE_CITY = "feed_line_city"
         private const val KEY_MAP_MODES = "map_modes"
+        private const val KEY_MAP_STATIONS = "map_stations"
         private const val KEY_CITY = "city"
     }
 }

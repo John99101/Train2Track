@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -53,9 +54,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mvvtracker.app.data.live.LineRoute
 import com.mvvtracker.app.data.live.routeKey
+import com.mvvtracker.app.data.station.MapStation
 import com.mvvtracker.app.ui.components.ReportRed
 import com.mvvtracker.app.viewmodel.LiveMapViewModel
+import com.mvvtracker.app.viewmodel.MapStationSet
 import com.mvvtracker.app.viewmodel.TrainPosition
 import kotlinx.coroutines.channels.Channel
 import kotlin.math.abs
@@ -180,9 +184,12 @@ fun LiveTrainMap(
     showUserLocation: Boolean = false,
     // Room taken by controls on top of the map (the filter buttons): the notes start below it.
     topInset: Dp = 0.dp,
+    // The map buttons (MapGroups bits) whose stations get a dot; 0 = the "Stations" button is off.
+    stationBits: Int = 0,
     modifier: Modifier = Modifier,
     onTrainClick: (line: String, tripId: String?, station: String?, mode: String?, city: String) -> Unit =
-        { _, _, _, _, _ -> }
+        { _, _, _, _, _ -> },
+    onStationClick: (station: MapStation, cityId: String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -192,6 +199,8 @@ fun LiveTrainMap(
     val loadError by liveViewModel.loadError.collectAsStateWithLifecycle()
     val routes by liveViewModel.routes.collectAsStateWithLifecycle()
     val dataDelayed by liveViewModel.dataDelayed.collectAsStateWithLifecycle()
+    val stationSet by liveViewModel.stations.collectAsStateWithLifecycle()
+    val stationClick by rememberUpdatedState { s: MapStation -> stationSet.cityId?.let { onStationClick(s, it) } }
 
     // Only fetch/update while this screen is on screen AND the app is in the
     // foreground: leaving the app (home button, screen off) stops the downloads too.
@@ -213,7 +222,17 @@ fun LiveTrainMap(
     val darkMap = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     // The badge size and line width follow the zoom; a tapped line is shown in full colour.
-    var tier by remember { mutableStateOf(zoomTier(START_ZOOM)) }
+    // Where the map stood for this city before a train's or a station's page.
+    val savedCamera = remember {
+        liveViewModel.camera?.takeIf { it.cityLat == centerLat && it.cityLon == centerLon }
+    }
+    val startZoom = savedCamera?.zoom ?: START_ZOOM
+    val keepCamera = remember { booleanArrayOf(savedCamera != null) }
+    val cityLat by rememberUpdatedState(centerLat)
+    val cityLon by rememberUpdatedState(centerLon)
+    var tier by remember { mutableStateOf(zoomTier(startZoom)) }
+    // Which stations the zoom allows: rail from a city view on, tram and bus stops closer.
+    var stationMask by remember { mutableStateOf(stationMaskFor(startZoom)) }
     var selectedRoute by remember { mutableStateOf<String?>(null) }
 
     val mapView = remember {
@@ -224,8 +243,8 @@ fun LiveTrainMap(
             overlayManager.tilesOverlay.setColorFilter(PALE_MAP)
             setMultiTouchControls(true)
             setUseDataConnection(true)
-            controller.setZoom(START_ZOOM)
-            controller.setCenter(GeoPoint(centerLat, centerLon))
+            controller.setZoom(startZoom)
+            controller.setCenter(GeoPoint(savedCamera?.lat ?: centerLat, savedCamera?.lon ?: centerLon))
             // Lowest overlay, so it only gets the taps no vehicle took: a tap on a
             // route line shows that line in full colour, a tap elsewhere ends it.
             // Lines that share a track lie on top of each other: tapping the same
@@ -233,9 +252,14 @@ fun LiveTrainMap(
             val map = this
             overlays.add(MapEventsOverlay(object : MapEventsReceiver {
                 override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                    // A station dot first: it opens the station's departures.
+                    routeLayer.stationAt(p, map.projection, STATION_TAP_DP * density)?.let {
+                        stationClick(it)
+                        return true
+                    }
                     val tolerance = (LINE_TAP_DP * density).toDouble()
                     val hits = drawn.routeOrder.asReversed()
-                        .filter { it.line.isCloseTo(p, tolerance, map) }
+                        .filter { it.isCloseTo(p, tolerance, map) }
                         .map { it.key }
                     val at = hits.indexOf(selectedRoute)
                     selectedRoute = when {
@@ -269,10 +293,20 @@ fun LiveTrainMap(
             liveViewModel.updateBounds(
                 north = bb.latNorth, south = bb.latSouth, east = bb.lonEast, west = bb.lonWest
             )
+            val c = mapView.mapCenter
+            liveViewModel.camera = LiveMapViewModel.MapCamera(
+                c.latitude, c.longitude, mapView.zoomLevelDouble, cityLat, cityLon
+            )
         }
     }
 
     LaunchedEffect(centerLat, centerLon) {
+        // Back from a train's or a station's page: the map stays where it was.
+        if (keepCamera[0]) {
+            keepCamera[0] = false
+            mapView.post { reportBounds() }
+            return@LaunchedEffect
+        }
         // Kick off the fetch right away with an estimated box (before the map
         // finishes laying out), then refine from the real bounds after layout.
         liveViewModel.updateBounds(
@@ -283,6 +317,7 @@ fun LiveTrainMap(
         mapView.controller.setZoom(START_ZOOM)
         mapView.controller.setCenter(GeoPoint(centerLat, centerLon))
         tier = zoomTier(START_ZOOM)
+        stationMask = stationMaskFor(START_ZOOM)
         mapView.post { reportBounds() }
     }
 
@@ -311,7 +346,9 @@ fun LiveTrainMap(
         mapView.addMapListener(object : MapListener {
             override fun onScroll(event: ScrollEvent?): Boolean = false
             override fun onZoom(event: ZoomEvent?): Boolean {
-                tier = zoomTier(event?.zoomLevel ?: mapView.zoomLevelDouble)
+                val zoom = event?.zoomLevel ?: mapView.zoomLevelDouble
+                tier = zoomTier(zoom)
+                stationMask = stationMaskFor(zoom)
                 return false
             }
         })
@@ -406,8 +443,10 @@ fun LiveTrainMap(
                 }
                 var routesChanged = false
                 repByRoute.forEach { (k, rep) ->
-                    if (!routeLines.containsKey(k)) {
-                        routeLines[k] = RouteLine(k, rep, routes.getValue(k), density)
+                    val pieces = routes.getValue(k)
+                    // New, or the line got new pieces (a branch) since it was drawn.
+                    if (routeLines[k]?.pieces !== pieces) {
+                        routeLines[k] = RouteLine(k, rep, pieces, density)
                         routesChanged = true
                     }
                 }
@@ -422,7 +461,19 @@ fun LiveTrainMap(
                     drawn.routeOrder = routeLines.values.sortedWith(
                         compareBy<RouteLine>({ it.key == selectedRoute }, { it.rank }, { it.key })
                     )
-                    routeLayer.items = drawn.routeOrder.flatMap { listOf(it.edgeLine, it.line) }
+                    // Per line all white edges first, then its colour, so its pieces join cleanly.
+                    routeLayer.items = drawn.routeOrder.flatMap { it.edgeLines + it.lines }
+                }
+
+                // STATION DOTS: those of the highlighted buttons the zoom allows, drawn
+                // with the lines (one picture), so they cost nothing while vehicles glide.
+                val dotBits = stationBits and stationMask
+                if (drawn.stations !== stationSet || drawn.dotBits != dotBits || drawn.tier != tier) {
+                    val dots = if (dotBits == 0) emptyList()
+                    else stationSet.stations.filter { it.bits and dotBits != 0 }.map { StationDot(it) }
+                    routeLayer.setStations(dots, stationRadiusDp(tier) * density, STATION_RING_DP * density)
+                    drawn.stations = stationSet
+                    drawn.dotBits = dotBits
                 }
 
                 // TRAIN MARKERS (reused): move existing markers, add new ones, drop
@@ -513,6 +564,27 @@ fun LiveTrainMap(
                 )
             }
 
+            // The "Stations" button is on, but no dot can be shown: why.
+            val stationNote = when {
+                stationBits == 0 -> null
+                stationSet.loaded && stationSet.stations.isEmpty() -> R.string.map_stations_unavailable
+                stationBits and stationMask.inv() != 0 -> R.string.map_stations_zoom
+                else -> null
+            }
+            if (stationNote != null) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        stringResource(stationNote),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
             // Reports in the visible part of the map; a tap moves the map to the next one.
             if (reportsInView.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -582,6 +654,13 @@ private class DrawnStyle {
     var selectedRoute: String? = null
     /** The route lines in draw order, the top one last. */
     var routeOrder: List<RouteLine> = emptyList()
+    var stations: MapStationSet? = null
+    var dotBits = 0
+}
+
+/** A station dot: the station and its place on the map. */
+private class StationDot(val station: MapStation) {
+    val point = GeoPoint(station.lat, station.lon)
 }
 
 /**
@@ -618,6 +697,39 @@ private class RouteLayer : Overlay() {
     private val refAt = Point()
     private val matrix = Matrix()
     private val scaledPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+    /** The station dots, drawn on top of the lines into the same picture. */
+    private var dots: List<StationDot> = emptyList()
+    private var dotRadius = 0f
+    private val dotFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.WHITE }
+    private val dotRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = STATION_RING_ARGB.toInt() }
+    private val dotAt = Point()
+
+    fun setStations(value: List<StationDot>, radiusPx: Float, ringPx: Float) {
+        dots = value
+        dotRadius = radiusPx
+        dotRing.strokeWidth = ringPx
+        stale = true
+    }
+
+    /** The station whose dot is nearest to [p], within [tolerancePx]; null when none. */
+    fun stationAt(p: GeoPoint, projection: Projection, tolerancePx: Float): MapStation? {
+        if (dots.isEmpty()) return null
+        val tap = projection.toPixels(p, null)
+        var best: MapStation? = null
+        var bestSquare = tolerancePx * tolerancePx
+        for (d in dots) {
+            projection.toPixels(d.point, dotAt)
+            val dx = (dotAt.x - tap.x).toFloat()
+            val dy = (dotAt.y - tap.y).toFloat()
+            val square = dx * dx + dy * dy
+            if (square <= bestSquare) {
+                bestSquare = square
+                best = d.station
+            }
+        }
+        return best
+    }
 
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow) return
@@ -658,6 +770,17 @@ private class RouteLayer : Overlay() {
         bitmap.eraseColor(Color.TRANSPARENT)
         val canvas = Canvas(bitmap)
         for (i in items.indices) items[i].draw(canvas, projection)
+        if (dots.isNotEmpty()) {
+            val margin = dotRadius * 2f
+            for (i in dots.indices) {
+                projection.toPixels(dots[i].point, dotAt)
+                val x = dotAt.x.toFloat()
+                val y = dotAt.y.toFloat()
+                if (x < -margin || y < -margin || x > w + margin || y > h + margin) continue
+                canvas.drawCircle(x, y, dotRadius, dotFill)
+                canvas.drawCircle(x, y, dotRadius, dotRing)
+            }
+        }
         pictureZoom = zoom
         val ref = projection.fromPixels(w / 2, h / 2) as GeoPoint
         pictureRef = ref
@@ -671,6 +794,7 @@ private class RouteLayer : Overlay() {
     override fun onDetach(mapView: MapView) {
         items.forEach { it.onDetach(mapView) }
         items = emptyList()
+        dots = emptyList()
         picture?.recycle()
         picture = null
     }
@@ -742,36 +866,38 @@ private fun badgeAlpha(train: TrainPosition, flagged: Boolean): Float = when {
 /**
  * The route line of one line: a white edge underneath, the line's colour on top,
  * with a per-mode stroke style (S-Bahn solid, U-Bahn dashed, Tram dotted, Bus
- * dash-dot).
+ * dash-dot). A line has one or more [pieces]: the whole route of one journey, and
+ * the parts other journeys add (a branch).
  *
- * Each is drawn as one path. Drawn as many short pieces, each with round ends, the
- * lines of a big city took about 500 ms per frame on a test device (the map was
+ * Each piece is drawn as one path. Drawn as many short pieces, each with round ends,
+ * the lines of a big city took about 500 ms per frame on a test device (the map was
  * redrawn up to 30 times a second while the vehicles move); as paths about 12 ms.
  */
-private class RouteLine(val key: String, train: TrainPosition, points: List<DoubleArray>, density: Float) {
+private class RouteLine(val key: String, train: TrainPosition, val pieces: LineRoute, density: Float) {
     val rank = drawRank(train.mode)
-    private val geoPoints = points.map { GeoPoint(it[0], it[1]) }
-    /** The white edge, drawn first. */
-    val edgeLine = pathLine(Color.WHITE)
-    /** The line in its colour, drawn on top of the edge. Taps are matched against it. */
     private val fullColor = trainColorArgb(train.colorHex, train.label, train.mode)
     /** The line's colour mixed with white: opaque, so no part of the line is blended twice. */
     private val paleColor = mixWithWhite(fullColor, PALE_LINE_WHITE)
-    val line = pathLine(paleColor).apply {
-        outlinePaint.pathEffect = dashForMode(train.mode, density)
+    /** The white edges, drawn first. */
+    val edgeLines = pieces.map { pathLine(it, Color.WHITE) }
+    /** The line in its colour, drawn on top of the edges. Taps are matched against it. */
+    val lines = pieces.map { piece ->
+        pathLine(piece, paleColor).apply { outlinePaint.pathEffect = dashForMode(train.mode, density) }
     }
-    private val edge = edgeLine.outlinePaint
-    private val fill = line.outlinePaint
+
+    fun isCloseTo(p: GeoPoint, tolerance: Double, map: MapView): Boolean = lines.any { it.isCloseTo(p, tolerance, map) }
 
     fun style(tier: ZoomTier, selected: Boolean, density: Float) {
         val width = lineWidthDp(tier) + if (selected) SELECTED_EXTRA_DP else 0f
-        fill.strokeWidth = width * density
-        fill.color = if (selected) fullColor else paleColor
-        edge.strokeWidth = (width + 2f * LINE_EDGE_DP) * density
+        lines.forEach {
+            it.outlinePaint.strokeWidth = width * density
+            it.outlinePaint.color = if (selected) fullColor else paleColor
+        }
+        edgeLines.forEach { it.outlinePaint.strokeWidth = (width + 2f * LINE_EDGE_DP) * density }
     }
 
-    private fun pathLine(color: Int) = Polyline(null, true).apply {
-        setPoints(geoPoints)
+    private fun pathLine(points: List<DoubleArray>, color: Int) = Polyline(null, true).apply {
+        setPoints(points.map { GeoPoint(it[0], it[1]) })
         outlinePaint.apply {
             isAntiAlias = true
             this.color = color

@@ -17,9 +17,11 @@ class LiveHostTest {
 
     @After fun reset() = LiveHost.configure(null)
 
-    @Test fun onlyHttpsAddressesUnderTrain2TrackOrKeyCdnAreTaken() {
+    @Test fun onlyHttpsAddressesUnderTrain2TrackAreTaken() {
         assertEquals("api.example.invalid", LiveHost.parse("https://api.example.invalid/")?.host)
-        assertEquals("t2t-1a2b.kxcdn.com", LiveHost.parse(" https://t2t-1a2b.kxcdn.com ")?.host)
+        assertEquals("cdn.example.invalid", LiveHost.parse(" https://cdn.example.invalid ")?.host)
+        // The old KeyCDN test domain is no longer taken (Cloudflare since 30 October 2026).
+        assertNull(LiveHost.parse("https://t2t-1a2b.kxcdn.com/"))
         assertNotNull(LiveHost.parse("https://example.invalid/"))
         assertNull(LiveHost.parse(null))
         assertNull(LiveHost.parse(""))
@@ -90,11 +92,11 @@ class LiveHostTest {
     }
 
     @Test fun anUnreachableCdnFallsBackToTheServer() {
-        LiveHost.configure("https://t2t-1a2b.kxcdn.com/")
+        LiveHost.configure("https://cdn.example.invalid/")
         val fake = FakeNetwork {
-            if (it.url.host.endsWith("kxcdn.com")) throw IOException("no route") else response(it, 200)
+            if (it.url.host == "cdn.example.invalid") throw IOException("no route") else response(it, 200)
         }
         assertEquals(200, call(fake, "/api/live/berlin/rail"))
-        assertEquals(listOf("t2t-1a2b.kxcdn.com", "example.invalid"), fake.hosts)
+        assertEquals(listOf("cdn.example.invalid", "example.invalid"), fake.hosts)
     }
 }

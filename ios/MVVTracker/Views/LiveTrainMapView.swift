@@ -14,10 +14,14 @@ import MVVTrackerCore
 ///  - the badges follow the zoom like on Android: full badge when close, a small
 ///    badge in between, a dot without a label when far. A reported vehicle keeps the
 ///    full badge at every zoom, is never faded, has a red ring and a larger "!", and
-///    is drawn on top (then S-Bahn and U-Bahn, rail, tram, bus).
+///    is drawn on top (then S-Bahn and U-Bahn, rail, tram, bus);
+///  - a line can have several pieces (its branches), each its own overlay;
+///  - the "Stations" button: a white dot with a dark ring on every station of the
+///    highlighted modes the zoom allows (`stationMask`), drawn above the lines by one
+///    overlay; a tap on a dot opens the station's departures.
 struct LiveTrainMapView: UIViewRepresentable {
     let trains: [TrainPosition]
-    let routes: [String: [GeoPoint]]
+    let routes: [String: LineRoute]
     let flaggedTripIds: Set<String>
     let showUserLocation: Bool
     /// Changes whenever the map should jump to a (new) city centre.
@@ -25,6 +29,11 @@ struct LiveTrainMapView: UIViewRepresentable {
     let centerToken: String
     let onBoundsChange: (_ north: Double, _ south: Double, _ east: Double, _ west: Double) -> Void
     let onTrainTap: (TrainPosition) -> Void
+    /// The station dots of the city, and the map buttons (`MapGroups` bits) whose
+    /// stations get one; 0 = the "Stations" button is off.
+    var stations: [MapStation] = []
+    var stationBits: Int = 0
+    var onStationTap: (MapStation) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -36,6 +45,19 @@ struct LiveTrainMapView: UIViewRepresentable {
         map.register(TrainBadgeAnnotationView.self, forAnnotationViewWithReuseIdentifier: TrainBadgeAnnotationView.reuseId)
         context.coordinator.recenter(map, on: center, token: centerToken, animated: false)
         context.coordinator.tier = badgeTier(longitudeSpan: map.region.span.longitudeDelta)
+        context.coordinator.stationMaskNow = stationMask(longitudeSpan: map.region.span.longitudeDelta)
+        // A tap next to a station dot opens it (taps on vehicles go to their badge).
+        // A double tap zooms (MapKit's own): the single tap waits until no second tap
+        // follows, so a double tap near a dot does not open the station.
+        let doubleTap = UITapGestureRecognizer(target: nil, action: nil)
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.cancelsTouchesInView = false
+        doubleTap.delegate = context.coordinator
+        map.addGestureRecognizer(doubleTap)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.mapTapped(_:)))
+        tap.delegate = context.coordinator
+        tap.require(toFail: doubleTap)
+        map.addGestureRecognizer(tap)
         return map
     }
 
@@ -45,16 +67,25 @@ struct LiveTrainMapView: UIViewRepresentable {
         c.recenter(map, on: center, token: centerToken, animated: true)
         if map.showsUserLocation != showUserLocation { map.showsUserLocation = showUserLocation }
         c.syncRoutes(map)
+        c.syncStations(map)
         c.syncTrains(map)
     }
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: LiveTrainMapView
         private var centeredToken: String?
         private var annotations: [String: TrainAnnotation] = [:]
-        private var routeOverlays: [String: RouteOverlay] = [:]
+        /// Per line its pieces' overlays, and the number of points of each piece (to
+        /// notice a line that got a new piece).
+        private var routeOverlays: [String: [RouteOverlay]] = [:]
+        private var routeShapes: [String: [Int]] = [:]
+        private var stationsOverlay: StationsOverlay?
+        /// The dots and kinds the overlay was last built from.
+        private var stationInput: (stations: [MapStation], bits: Int)?
+        /// Which station kinds the zoom allows now (see `stationMask`).
+        var stationMaskNow = 0
         private var boundsWork: DispatchWorkItem?
         /// The badge size for the current zoom (see `badgeTier`).
         var tier: BadgeTier = .mid
@@ -74,25 +105,76 @@ struct LiveTrainMapView: UIViewRepresentable {
             reportBounds(map, delay: 0)
         }
 
-        // ROUTES (persistent): one full line per shown line that has a route.
+        // ROUTES (persistent): one full line (all its pieces) per shown line that has a route.
         func syncRoutes(_ map: MKMapView) {
             var wanted: [String: TrainPosition] = [:]
             for t in parent.trains {
                 let k = routeKey(mode: t.mode, label: t.label)
                 if wanted[k] == nil, parent.routes[k] != nil { wanted[k] = t }
             }
-            for (k, rep) in wanted where routeOverlays[k] == nil {
-                let pts = parent.routes[k]!.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-                let overlay = RouteOverlay(coordinates: pts, count: pts.count)
-                overlay.color = UIColor(rep.displayColor)
-                overlay.mode = rep.mode
-                routeOverlays[k] = overlay
-                map.addOverlay(overlay, level: .aboveRoads)
+            for (k, rep) in wanted {
+                let pieces = parent.routes[k]!
+                let shape = pieces.map(\.count)
+                // New, or the line got new pieces (a branch) since it was drawn.
+                if routeShapes[k] == shape { continue }
+                if let old = routeOverlays[k] { map.removeOverlays(old) }
+                let overlays = pieces.map { piece -> RouteOverlay in
+                    let pts = piece.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+                    let overlay = RouteOverlay(coordinates: pts, count: pts.count)
+                    overlay.color = UIColor(rep.displayColor)
+                    overlay.mode = rep.mode
+                    return overlay
+                }
+                routeOverlays[k] = overlays
+                routeShapes[k] = shape
+                map.addOverlays(overlays, level: .aboveRoads)
             }
             for k in Set(routeOverlays.keys).subtracting(wanted.keys) {
-                if let o = routeOverlays.removeValue(forKey: k) { map.removeOverlay(o) }
+                if let o = routeOverlays.removeValue(forKey: k) { map.removeOverlays(o) }
+                routeShapes.removeValue(forKey: k)
             }
         }
+
+        // STATION DOTS: one overlay with the dots of the highlighted buttons the zoom
+        // allows, above the lines; replaced when that set changes.
+        func syncStations(_ map: MKMapView) {
+            let bits = parent.stationBits & stationMaskNow
+            // Called on every update (about once a second): only rebuilt when the dots
+            // or the zoom changed (comparing the same list is instant).
+            if let last = stationInput, last.bits == bits, last.stations == parent.stations { return }
+            stationInput = (parent.stations, bits)
+            let dots = bits == 0 ? [] : parent.stations.filter { $0.bits & bits != 0 }
+            if let current = stationsOverlay, current.stations == dots { return }
+            if let current = stationsOverlay { map.removeOverlay(current) }
+            stationsOverlay = nil
+            guard !dots.isEmpty else { return }
+            let overlay = StationsOverlay(stations: dots)
+            stationsOverlay = overlay
+            map.addOverlay(overlay, level: .aboveLabels)
+        }
+
+        /// A tap on the map: the station whose dot is nearest, within 16 points.
+        @objc func mapTapped(_ gesture: UITapGestureRecognizer) {
+            guard let map = gesture.view as? MKMapView, let overlay = stationsOverlay else { return }
+            let at = gesture.location(in: map)
+            // A tap on a vehicle belongs to the vehicle.
+            if map.hitTest(at, with: nil) is MKAnnotationView { return }
+            let visible = map.visibleMapRect
+            var best: MapStation?
+            var bestDistance: CGFloat = 16
+            for (station, point) in zip(overlay.stations, overlay.points) where visible.contains(point) {
+                let p = map.convert(point.coordinate, toPointTo: map)
+                let d = hypot(p.x - at.x, p.y - at.y)
+                if d <= bestDistance {
+                    bestDistance = d
+                    best = station
+                }
+            }
+            if let best { parent.onStationTap(best) }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
         // TRAIN MARKERS (reused): move existing, add new, drop gone.
         func syncTrains(_ map: MKMapView) {
@@ -150,6 +232,7 @@ struct LiveTrainMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let stations = overlay as? StationsOverlay { return StationsRenderer(stations: stations) }
             guard let route = overlay as? RouteOverlay else { return MKOverlayRenderer(overlay: overlay) }
             return RouteRenderer(route: route, dash: Self.dash(for: route.mode))
         }
@@ -161,6 +244,11 @@ struct LiveTrainMapView: UIViewRepresentable {
         /// Called while the map moves or zooms: the badges change size as soon as the
         /// zoom crosses a step, not only when the gesture ends.
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            let mask = stationMask(longitudeSpan: mapView.region.span.longitudeDelta)
+            if mask != stationMaskNow {
+                stationMaskNow = mask
+                syncStations(mapView)
+            }
             let next = badgeTier(longitudeSpan: mapView.region.span.longitudeDelta)
             guard next != tier else { return }
             tier = next
@@ -207,6 +295,57 @@ final class TrainAnnotation: NSObject, MKAnnotation {
         self.train = train
         self.flagged = flagged
         self.coordinate = CLLocationCoordinate2D(latitude: train.latitude, longitude: train.longitude)
+    }
+}
+
+/// The station dots: one overlay for all of them, over the whole world (MapKit asks
+/// the renderer only for the visible part).
+final class StationsOverlay: NSObject, MKOverlay {
+    let stations: [MapStation]
+    let points: [MKMapPoint]
+    let coordinate: CLLocationCoordinate2D
+    let boundingMapRect: MKMapRect
+
+    init(stations: [MapStation]) {
+        self.stations = stations
+        points = stations.map { MKMapPoint(CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)) }
+        var rect = MKMapRect.null
+        for p in points { rect = rect.union(MKMapRect(origin: p, size: MKMapSize(width: 0, height: 0))) }
+        // Room for the dots' radius at the edges (generous: a dot is a few screen
+        // points, which is many map points on a map zoomed out).
+        boundingMapRect = rect.isNull ? .world : rect.insetBy(dx: -50_000, dy: -50_000)
+        coordinate = boundingMapRect.isNull ? CLLocationCoordinate2D() : MKMapPoint(x: boundingMapRect.midX, y: boundingMapRect.midY).coordinate
+    }
+}
+
+/// Draws the station dots in screen points at every zoom: white, with a dark ring,
+/// a little larger when the map is close (like Android's `stationRadiusDp`).
+final class StationsRenderer: MKOverlayRenderer {
+    private let stations: StationsOverlay
+    private static let ring = UIColor(red: 60 / 255, green: 60 / 255, blue: 60 / 255, alpha: 1)
+
+    init(stations: StationsOverlay) {
+        self.stations = stations
+        super.init(overlay: stations)
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        // Map points per screen point at this zoom. "Close" as for the badges: a phone
+        // map at most 0.131 degrees of longitude wide (\`nearMaxLongitudeSpan\`), about
+        // 250 map points per screen point.
+        let perPoint = 1 / Double(zoomScale)
+        let radius = CGFloat((perPoint <= 250 ? 4.5 : 3) * perPoint)
+        let ringWidth = CGFloat(1.5 * perPoint)
+        let visible = mapRect.insetBy(dx: -Double(radius) * 2, dy: -Double(radius) * 2)
+        context.setFillColor(UIColor.white.cgColor)
+        context.setStrokeColor(Self.ring.cgColor)
+        context.setLineWidth(ringWidth)
+        for p in stations.points where visible.contains(p) {
+            let c = point(for: p)
+            let rect = CGRect(x: c.x - radius, y: c.y - radius, width: 2 * radius, height: 2 * radius)
+            context.fillEllipse(in: rect)
+            context.strokeEllipse(in: rect)
+        }
     }
 }
 

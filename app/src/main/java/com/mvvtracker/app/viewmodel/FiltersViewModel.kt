@@ -23,4 +23,6 @@ class FiltersViewModel @Inject constructor(
     fun setFeedLine(cityId: String, line: String?) = store.setFeedLine(cityId, line)
 
     fun setMapModes(names: Set<String>) = store.setMapModes(names)
+
+    fun setMapStations(on: Boolean) = store.setMapStations(on)
 }

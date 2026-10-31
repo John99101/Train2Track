@@ -45,6 +45,9 @@
         <item quantity="other">%1$d trains · live data delayed</item>
     </plurals>
     <string name="map_loading">Loading live trains…</string>
+    <string name="map_stations">Stations</string>
+    <string name="map_stations_zoom">Zoom in to see the stations.</string>
+    <string name="map_stations_unavailable">The stations could not be loaded.</string>
     <string name="map_attribution">© OpenStreetMap contributors</string>
     <plurals name="map_reports_in_view">
         <item quantity="one">%1$d report in view</item>

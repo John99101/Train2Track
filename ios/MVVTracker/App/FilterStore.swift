@@ -23,6 +23,8 @@ final class FilterStore: ObservableObject {
     @Published private(set) var feedLineCity: String?
     /// Modes shown on the Map by name; nil = the default selection (S-Bahn and U-Bahn).
     @Published private(set) var mapModes: Set<String>?
+    /// The Map's "Stations" button: dots for the stations of the shown modes. Off until switched on.
+    @Published private(set) var mapStations: Bool
 
     private let d = UserDefaults.standard
     private enum Keys {
@@ -30,6 +32,7 @@ final class FilterStore: ObservableObject {
         static let feedLine = "filter_feed_line"
         static let feedLineCity = "filter_feed_line_city"
         static let mapModes = "filter_map_modes"
+        static let mapStations = "filter_map_stations"
     }
 
     private init() {
@@ -38,6 +41,7 @@ final class FilterStore: ObservableObject {
         feedLine = d.string(forKey: Keys.feedLine)
         feedLineCity = d.string(forKey: Keys.feedLineCity)
         mapModes = d.stringArray(forKey: Keys.mapModes).map { Set($0) }
+        mapStations = d.bool(forKey: Keys.mapStations)
     }
 
     /// The Feed's line filter while `cityId` is shown, else nil (all lines).
@@ -68,13 +72,19 @@ final class FilterStore: ObservableObject {
         d.set(Array(names), forKey: Keys.mapModes)
     }
 
+    func setMapStations(_ on: Bool) {
+        mapStations = on
+        d.set(on, forKey: Keys.mapStations)
+    }
+
     /// "Delete my data".
     func clear() {
         feedModes = Self.defaultModes
         feedLine = nil
         feedLineCity = nil
         mapModes = nil
-        for key in [Keys.feedModes, Keys.feedLine, Keys.feedLineCity, Keys.mapModes] {
+        mapStations = false
+        for key in [Keys.feedModes, Keys.feedLine, Keys.feedLineCity, Keys.mapModes, Keys.mapStations] {
             d.removeObject(forKey: key)
         }
     }

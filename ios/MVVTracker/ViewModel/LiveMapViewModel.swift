@@ -2,6 +2,14 @@ import Foundation
 import Combine
 import MVVTrackerCore
 
+/// The station dots of `cityId` for the map's "Stations" button; `loaded` = the
+/// download has finished (an empty list then means none could be loaded).
+struct MapStationSet: Equatable {
+    var cityId: String?
+    var stations: [MapStation] = []
+    var loaded = false
+}
+
 /// Streams live vehicles for a whole city (the Feed, or a map view inside a city)
 /// or for a free map box (a map view outside the supported cities). Port of
 /// Android's `LiveMapViewModel`. Two loops run:
@@ -26,8 +34,10 @@ final class LiveMapViewModel: ObservableObject {
     /// The report cities of what is on screen (see `reportScope`): the screen hands
     /// them to its `ReportCountsViewModel`, which loads only these reports.
     @Published private(set) var reportCities: [String] = []
-    /// Full line routes, keyed by `routeKey(mode:label:)`.
-    @Published private(set) var routes: [String: [GeoPoint]] = [:]
+    /// Full line routes (their pieces), keyed by `routeKey(mode:label:)`.
+    @Published private(set) var routes: [String: LineRoute] = [:]
+    /// The map's "Stations" button: the dots of the city shown last, loaded only while it is on.
+    @Published private(set) var stations = MapStationSet()
 
     private let repo = LiveTripsRepository.shared
     private let shapes = ShapeStore.shared
@@ -43,12 +53,15 @@ final class LiveMapViewModel: ObservableObject {
     /// The groups the screen shows (see `showModes`); nil until it said so.
     private var groups: Set<LiveGroup>?
 
+    /// When each vehicle started standing at its stop, kept across downloads.
+    private let standMemory = LiveMotion.StandMemory()
+
     private var fetchTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var computeTask: Task<Void, Never>?
 
     // Line routes for the current city (or free map area).
-    private var routeByKey: [String: [GeoPoint]] = [:]
+    private var routeByKey: [String: LineRoute] = [:]
     private var routeInFlight: Set<String> = []
     /// A line the server had no route for: when it may be asked again.
     private var routeRetryAt: [String: Date] = [:]
@@ -59,6 +72,16 @@ final class LiveMapViewModel: ObservableObject {
     private var wantedRouteKeys: Set<String> = []
     private var runningRouteFetches = 0
     private var routeQueue: [(key: String, seg: LiveSegment, scope: String?)] = []
+
+    // Station dots: wanted while the button is on, for the city shown last (a free
+    // map box keeps that city's dots).
+    private var stationsWanted = false
+    private var stationsCity: String?
+    private var stationsTarget: String?
+    private var stationsTask: Task<Void, Never>?
+
+    /// Whether the map has told its area yet (false before its first layout).
+    var hasViewport: Bool { viewport != nil }
 
     func onAppear() {
         active = true
@@ -105,8 +128,33 @@ final class LiveMapViewModel: ObservableObject {
         if active { restartFetchLoop() }
     }
 
+    /// The map's "Stations" button. Port of Android's `showStations`.
+    func showStations(_ on: Bool) {
+        stationsWanted = on
+        reloadStations()
+    }
+
+    /// Loads the dots of the wanted city (none while the button is off).
+    private func reloadStations() {
+        let target = stationsWanted ? stationsCity : nil
+        guard target != stationsTarget else { return }
+        stationsTarget = target
+        stationsTask?.cancel()
+        stations = MapStationSet(cityId: target)
+        guard let target else { return }
+        stationsTask = Task { [weak self] in
+            let list = await MapStationStore.shared.stations(target)
+            guard let self, !Task.isCancelled, self.stationsTarget == target else { return }
+            self.stations = MapStationSet(cityId: target, stations: list, loaded: true)
+        }
+    }
+
     private func setSource(_ next: Source?) {
         guard let next else { return }
+        if case .city(let city) = next, city.id != stationsCity {
+            stationsCity = city.id
+            reloadStations()
+        }
         // A free box that moved a bit inside the same area is still the same source
         // for routes; the fetch follows the new box.
         if next != source {
@@ -174,7 +222,8 @@ final class LiveMapViewModel: ObservableObject {
                 waitMs = Int(covers ? LiveTripsRepository.boxRefreshMs : LiveTripsRepository.boxMinGapMs)
             }
             guard !Task.isCancelled, source == src else { return waitMs }
-            segments = snap.segments
+            // Each hop learns when its vehicle stands at its first stop (LiveMotion).
+            segments = LiveMotion.withStandingTimes(snap.segments, memory: standMemory)
             loadError = false
             dataDelayed = snap.delayed
             recomputeSoon()
@@ -289,7 +338,7 @@ final class LiveMapViewModel: ObservableObject {
             runningRouteFetches += 1
             Task { [weak self] in
                 guard let self else { return }
-                var pts: [GeoPoint]?
+                var pts: LineRoute?
                 if let scope = job.scope {
                     pts = await RouteStore.shared.fetchLine(scope, mode: job.seg.mode, label: job.seg.label,
                                                             tripId: job.seg.tripId!)

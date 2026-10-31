@@ -1,5 +1,7 @@
 package com.mvvtracker.app.ui.screens
 
+import com.mvvtracker.app.data.station.MapGroups
+
 /**
  * How close the map is. It decides the size of the vehicle badges (full badge,
  * small badge, dot) and the width of the route lines.
@@ -30,6 +32,28 @@ internal fun drawRank(mode: String, flagged: Boolean = false): Int = when {
     mode == "BUS" -> 0
     else -> 2
 }
+
+// Station dots ("Stations" button): rail stations from a city view on, tram stops
+// closer, bus stops only on a few streets' view (there are thousands of them).
+private const val BUS_STOP_ZOOM = 14.5
+
+/** The station kinds (MapGroups bits) the zoom shows a dot for. */
+internal fun stationMaskFor(zoom: Double): Int {
+    var mask = 0
+    if (zoom >= MID_ZOOM) mask = mask or MapGroups.SBAHN or MapGroups.UBAHN or MapGroups.RAIL
+    if (zoom >= NEAR_ZOOM) mask = mask or MapGroups.TRAM
+    if (zoom >= BUS_STOP_ZOOM) mask = mask or MapGroups.BUS
+    return mask
+}
+
+/** Radius of a station dot, without its ring. */
+internal fun stationRadiusDp(tier: ZoomTier): Float = if (tier == ZoomTier.NEAR) 4.5f else 3f
+
+internal const val STATION_RING_DP = 1.5f
+/** How far from a dot a tap still opens its station. */
+internal const val STATION_TAP_DP = 16f
+/** The dark ring of a station dot (white inside), readable on the light and the dark map. */
+internal const val STATION_RING_ARGB = 0xFF3C3C3C
 
 /** Width of a route line, without its white edge. */
 internal fun lineWidthDp(tier: ZoomTier): Float = when (tier) {

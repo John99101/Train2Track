@@ -51,10 +51,38 @@ final class UserReportBackend {
         let entryRef = db.collection(collection).document(docId)
         let noteRef = db.collection(ReportKey.ownersCollection)
             .document(ReportKey.ownerNoteId(collection: collection, documentId: docId))
-        _ = try await db.runTransaction { transaction, _ -> Any? in
-            transaction.setData(entry, forDocument: entryRef)
-            transaction.setData(note, forDocument: noteRef)
-            return nil
+        // At most 15 seconds, like Android: without a connection the transaction can
+        // take much longer, and the report window would stay on "Sending".
+        try await Self.withTimeLimit(Self.sendTimeout) { [db, entry, note] in
+            _ = try await db.runTransaction { transaction, _ -> Any? in
+                transaction.setData(entry, forDocument: entryRef)
+                transaction.setData(note, forDocument: noteRef)
+                return nil
+            }
+        }
+    }
+
+    /// Sending took too long (see `withTimeLimit`).
+    struct SendTimeout: Error {}
+
+    /// Runs `work` but gives up after `seconds` with `SendTimeout` (the work itself
+    /// cannot be stopped; it may still finish later).
+    private static func withTimeLimit(_ seconds: TimeInterval,
+                                      _ work: @escaping () async throws -> Void) async throws {
+        let once = ResumeOnce()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Task {
+                do {
+                    try await work()
+                    once.resume(continuation, with: .success(()))
+                } catch {
+                    once.resume(continuation, with: .failure(error))
+                }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                once.resume(continuation, with: .failure(SendTimeout()))
+            }
         }
     }
 
@@ -85,14 +113,16 @@ final class UserReportBackend {
         // "Entered" is recorded so we can later analyse which trains are controlled
         // how often/when/where. It carries no id: the statistics need no rider.
         // Best-effort; never blocks the report. Only admins/server can read it;
-        // wipe it for testing via functions/clearAnalytics.js.
-        _ = try? await db.collection("control_log").addDocument(data: [
+        // wipe it for testing via functions/clearAnalytics.js. Not awaited: without
+        // a connection Firestore keeps it and sends it later. (The completion form:
+        // inside this async function the plain call would pick the awaiting overload.)
+        _ = db.collection("control_log").addDocument(data: [
             "tripId": tripId,
             "line": line,
             "station": station,
             "city": city,
             "createdAt": FieldValue.serverTimestamp()
-        ])
+        ], completion: nil)
     }
 
     /// "Exited": records an EXIT vote for the train. ANY user viewing the train can
@@ -178,31 +208,47 @@ final class UserReportBackend {
         )
     }
 
-    /// Live per-trip delay tally: tripId -> (confirm, onTime), for the report
-    /// `cities` on screen (nil = every city). Empty on any error.
+    /// One live delay vote: `confirm` = "it is late", false = "on time".
+    struct DelayVote {
+        let tripId: String
+        let confirm: Bool
+        let expiresAtMs: Int64?
+    }
+
+    /// The live delay votes of the report `cities` on screen (nil = every city); votes
+    /// over the spam limit (flagged by the server) are left out. The caller counts
+    /// them with `delayTally`, again every minute, so expired votes drop out (the
+    /// query's time is fixed when it starts). Empty on any error.
     @discardableResult
     func observeDelayVotes(cities: [String]? = nil,
-                           _ onChange: @escaping ([String: (confirm: Int, onTime: Int)]) -> Void) -> ListenerRegistration {
+                           _ onChange: @escaping ([DelayVote]) -> Void) -> ListenerRegistration {
         AuthGatedListener { [delayVotes] in
             CityScopedListener(collection: delayVotes, cities: cities) { documents in
-                guard let documents else {
-                    onChange([:]); return
-                }
-                var tally: [String: (confirm: Int, onTime: Int)] = [:]
-                for doc in documents {
-                    // Votes over the spam limit (flagged by the server) don't count.
-                    guard let tripId = doc["tripId"] as? String, doc["throttled"] as? Bool != true else { continue }
-                    var t = tally[tripId] ?? (0, 0)
+                guard let documents else { onChange([]); return }
+                onChange(documents.compactMap { doc -> DelayVote? in
+                    guard let tripId = doc["tripId"] as? String, doc["throttled"] as? Bool != true else { return nil }
+                    let confirm: Bool
                     switch doc["vote"] as? String {
-                    case Self.delayConfirm: t.confirm += 1
-                    case Self.delayOnTime:  t.onTime += 1
-                    default: break
+                    case Self.delayConfirm: confirm = true
+                    case Self.delayOnTime: confirm = false
+                    default: return nil
                     }
-                    tally[tripId] = t
-                }
-                onChange(tally)
+                    let expires = (doc["expiresAt"] as? Timestamp).map { Int64($0.dateValue().timeIntervalSince1970 * 1000) }
+                    return DelayVote(tripId: tripId, confirm: confirm, expiresAtMs: expires)
+                })
             }
         }
+    }
+
+    /// tripId -> (confirm, onTime) of the votes not yet expired at `nowMs`.
+    static func delayTally(_ votes: [DelayVote], nowMs: Int64) -> [String: (confirm: Int, onTime: Int)] {
+        var tally: [String: (confirm: Int, onTime: Int)] = [:]
+        for v in votes where (v.expiresAtMs ?? .max) > nowMs {
+            var t = tally[v.tripId] ?? (0, 0)
+            if v.confirm { t.confirm += 1 } else { t.onTime += 1 }
+            tally[v.tripId] = t
+        }
+        return tally
     }
 
     // MARK: - How full is it? (occupancy votes, from 0.6.0)
@@ -273,6 +319,7 @@ final class UserReportBackend {
     }
 
     private static let reevaluateSeconds: TimeInterval = 60
+    private static let sendTimeout: TimeInterval = 15
     private static let stateEntered = "entered"
     private static let stateExited = "exited"
     private static let delayCollection = "delay_reports"
@@ -280,6 +327,20 @@ final class UserReportBackend {
     private static let delayOnTime = "on_time"
     private static let delayVoteTtl: TimeInterval = 30 * 60   // 30 min
     private static let occupancyCollection = "occupancy_votes"
+}
+
+/// Resumes a continuation only once (the first of the work and the time limit).
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func resume(_ continuation: CheckedContinuation<Void, Error>, with result: Result<Void, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        if done { return }
+        done = true
+        continuation.resume(with: result)
+    }
 }
 
 /// A running report listener plus its once-a-minute re-evaluation timer.

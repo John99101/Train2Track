@@ -14,11 +14,15 @@ const iso = (offsetS) => new Date(Date.now() + offsetS * 1000).toISOString();
 const stop = (id, name, lat, lon, modes = ["SUBURBAN", "SUBWAY"]) => ({ type: "STOP", id, name, lat, lon, modes });
 let geocode = [];
 let stopTimes = {};
+let failWithCity = false;   // the second search (with the city name) fails
 global.fetch = async (url, options) => {
   const u = new URL(url);
   asked.push({ host: u.host, path: u.pathname, params: u.searchParams, headers: options.headers });
   const ok = (body) => ({ ok: true, status: 200, json: async () => body });
-  if (u.pathname === "/api/v1/geocode") return ok(geocode);
+  if (u.pathname === "/api/v1/geocode") {
+    if (failWithCity && /^münchen /.test(u.searchParams.get("text") || "")) return { ok: false, status: 500, json: async () => ({}) };
+    return ok(geocode);
+  }
   if (u.pathname === "/api/v1/stoptimes") {
     const body = stopTimes[u.searchParams.get("stopId")];
     return body ? ok(body) : { ok: false, status: 404, json: async () => ({}) };
@@ -94,7 +98,7 @@ const departure = (route, mode, headsign, depOffset, extra = {}) => ({
   await test("search: a text that is too short, too long or odd is refused", async () => {
     assert.strictEqual((await call(api, "/api/stations/muenchen/m")).code, 400);
     assert.strictEqual((await call(api, `/api/stations/muenchen/${"x".repeat(41)}`)).code, 400);
-    assert.strictEqual((await call(api, "/api/stations/muenchen/%3Cscript%3E")).code, 400);
+    assert.strictEqual((await call(api, "/api/stations/muenchen/%3C%3E%21")).code, 400);
     assert.strictEqual((await call(api, "/api/stations/muenchen/marienplatz?x=1")).code, 400);
     assert.strictEqual(count("/geocode"), 0);
   });
@@ -141,6 +145,46 @@ const departure = (route, mode, headsign, depOffset, extra = {}) => ({
   await test("helpers: query normalising", async () => {
     assert.strictEqual(S.normalizeQuery("  Münchner   Freiheit "), "münchner freiheit");
     assert.strictEqual(S.normalizeQuery("x"), null);
+    assert.strictEqual(S.normalizeQuery("S+U Hbf"), "s+u hbf");
+    assert.strictEqual(S.normalizeQuery("Hbf!"), "hbf");
+    assert.strictEqual(S.normalizeQuery("<>"), null);
+  });
+  const quiet = { info() {}, warn() {}, error() {} };
+  await test("search with signs: S+U is asked, odd signs become spaces", async () => {
+    const r = await call(createApi({ db, logger: quiet }), "/api/stations/muenchen/S%2BU%20Hbf");
+    assert.strictEqual(r.code, 200);
+  });
+  await test("a burst of new searches: transitous is asked at most 20 times, the rest gets 429", async () => {
+    const fresh = createApi({ db, logger: quiet });
+    reset();
+    const codes = [];
+    for (let i = 0; i < 15; i++) codes.push((await call(fresh, `/api/stations/muenchen/zz${i}`)).code);
+    assert.ok(codes.includes(429), codes.join(","));
+    assert.ok(count("/geocode") <= 20, String(count("/geocode")));
+  });
+  await test("a station transitous cannot answer is not asked again within a minute", async () => {
+    const fresh = createApi({ db, logger: quiet });
+    reset();
+    assert.strictEqual((await call(fresh, "/api/station/muenchen/de:09162:999")).code, 502);
+    assert.strictEqual((await call(fresh, "/api/station/muenchen/de:09162:999")).code, 502);
+    assert.strictEqual(count("/stoptimes"), 1);
+  });
+  await test("half an answer (the second search failed) is not kept", async () => {
+    const fresh = createApi({ db, logger: quiet });
+    failWithCity = true;
+    reset();
+    await call(fresh, "/api/stations/muenchen/sendlinger");
+    await call(fresh, "/api/stations/muenchen/sendlinger");
+    failWithCity = false;
+    assert.strictEqual(count("/geocode"), 4);
+  });
+  await test("no city from the prototype, no doubled slash, no escaped city", async () => {
+    const fresh = createApi({ db, logger: quiet });
+    reset();
+    for (const p of ["/api/live/constructor", "/api/live/toString/rail", "/api/live//muenchen//rail", "/api/live/muenchen/rail/", "/api/live/m%75enchen/rail"]) {
+      assert.strictEqual((await call(fresh, p)).code, 404, p);
+    }
+    assert.strictEqual(asked.length, 0);
   });
   await test("no errors were logged", async () => {
     assert.deepStrictEqual(errors, []);

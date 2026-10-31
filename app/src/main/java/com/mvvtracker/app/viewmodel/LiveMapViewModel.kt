@@ -2,7 +2,9 @@ package com.mvvtracker.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mvvtracker.app.data.live.LineRoute
 import com.mvvtracker.app.data.live.LiveGroup
+import com.mvvtracker.app.data.live.LiveMotion
 import com.mvvtracker.app.data.live.LiveSegment
 import com.mvvtracker.app.data.live.LiveTripsRepository
 import com.mvvtracker.app.data.live.RouteStore
@@ -15,6 +17,8 @@ import com.mvvtracker.app.data.model.cityForView
 import com.mvvtracker.app.data.model.reportCityAt
 import com.mvvtracker.app.data.model.reportScopeFor
 import com.mvvtracker.app.data.repository.ReportScope
+import com.mvvtracker.app.data.station.MapStation
+import com.mvvtracker.app.data.station.MapStationStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -26,14 +30,27 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlin.math.abs
+
+/**
+ * The station dots of [cityId] for the map's "Stations" button; [loaded] = the
+ * download has finished (an empty list then means none could be loaded).
+ */
+data class MapStationSet(
+    val cityId: String? = null,
+    val stations: List<MapStation> = emptyList(),
+    val loaded: Boolean = false
+)
 
 /** A single train, positioned at the current instant along its route segment. */
 data class TrainPosition(
@@ -76,7 +93,8 @@ class LiveMapViewModel @Inject constructor(
     private val shapes: ShapeStore,
     private val routeStore: RouteStore,
     private val locationCityProvider: LocationCityProvider,
-    private val reportScope: ReportScope
+    private val reportScope: ReportScope,
+    private val mapStations: MapStationStore
 ) : ViewModel() {
 
     data class Bounds(val north: Double, val south: Double, val east: Double, val west: Double) {
@@ -118,10 +136,26 @@ class LiveMapViewModel @Inject constructor(
     private val _dataDelayed = MutableStateFlow(false)
     val dataDelayed: StateFlow<Boolean> = _dataDelayed.asStateFlow()
 
+    /**
+     * When each vehicle started standing at its stop, kept across downloads (see
+     * [LiveMotion.StandMemory]).
+     */
+    private val standMemory = LiveMotion.StandMemory()
+
+    /**
+     * Where the map stood: its centre and zoom, for the city centred at
+     * [cityLat]/[cityLon]. Back from a train's or a station's page the map opens
+     * there again instead of at the city centre.
+     */
+    data class MapCamera(val lat: Double, val lon: Double, val zoom: Double, val cityLat: Double, val cityLon: Double)
+
+    @Volatile
+    var camera: MapCamera? = null
+
     // Full line routes (key = routeKey(mode, label)). They come from the saved /
     // server route set of the city; a line missing there is asked from the server
     // once. Outside the supported cities no routes are drawn.
-    private val routeByKey = ConcurrentHashMap<String, List<DoubleArray>>()
+    private val routeByKey = ConcurrentHashMap<String, LineRoute>()
     private val routeInFlight = ConcurrentHashMap.newKeySet<String>()
     private val routeRetryAtMs = ConcurrentHashMap<String, Long>()   // a line the server had no route for
     private val routeSemaphore = Semaphore(5)          // cap parallel route requests
@@ -129,8 +163,13 @@ class LiveMapViewModel @Inject constructor(
     // False while the city's route set is still loading: until then every line looks missing.
     @Volatile private var routeSetReady = false
     @Volatile private var wantedRouteKeys: Set<String> = emptySet()   // what the Map last asked for
-    private val _routes = MutableStateFlow<Map<String, List<DoubleArray>>>(emptyMap())
-    val routes: StateFlow<Map<String, List<DoubleArray>>> = _routes.asStateFlow()
+    private val _routes = MutableStateFlow<Map<String, LineRoute>>(emptyMap())
+    val routes: StateFlow<Map<String, LineRoute>> = _routes.asStateFlow()
+
+    // The map's "Stations" button: the dots of the shown city, loaded only while it is on.
+    private val stationsWanted = MutableStateFlow(false)
+    private val _stations = MutableStateFlow(MapStationSet())
+    val stations: StateFlow<MapStationSet> = _stations.asStateFlow()
 
     /** Nearest supported city from the user's location (null until known/allowed). */
     private val _nearestCity = MutableStateFlow<GermanCity?>(null)
@@ -141,9 +180,9 @@ class LiveMapViewModel @Inject constructor(
         // the right city (updates within seconds once permission is granted).
         viewModelScope.launch {
             while (isActive) {
-                if (active.value) {
-                    locationCityProvider.nearestCity()?.let { _nearestCity.value = it }
-                }
+                // Asleep while the map is hidden or the app is in the background.
+                active.first { it }
+                locationCityProvider.nearestCity()?.let { _nearestCity.value = it }
                 delay(LOCATION_MILLIS)
             }
         }
@@ -166,7 +205,11 @@ class LiveMapViewModel @Inject constructor(
                     while (isActive) {
                         val waitMs = try {
                             val snap = fetch(src, shown)
-                            live = Live(snap.segments, (src as? Source.City)?.city?.id)
+                            // Each hop learns when its vehicle stands at its first stop.
+                            val segments = withContext(Dispatchers.Default) {
+                                LiveMotion.withStandingTimes(snap.segments, standMemory)
+                            }
+                            live = Live(segments, (src as? Source.City)?.city?.id)
                             _loadError.value = false
                             _dataDelayed.value = snap.delayed
                             wake.trySend(Unit)
@@ -187,10 +230,22 @@ class LiveMapViewModel @Inject constructor(
                     }
                 }
         }
+        // Station dots: the stations of the city shown last (a free map box keeps
+        // them), loaded when the button is switched on and when the city changes.
+        viewModelScope.launch {
+            combine(stationsWanted, source.mapNotNull { (it as? Source.City)?.city?.id }) { on, city -> if (on) city else null }
+                .distinctUntilChanged()
+                .collectLatest { city ->
+                    _stations.value = MapStationSet(city)
+                    if (city != null) _stations.value = MapStationSet(city, mapStations.stations(city), loaded = true)
+                }
+        }
         // Positions: recomputed on a background thread, early when new data arrives.
         viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                if (active.value) _trains.value = compute(System.currentTimeMillis())
+                // Asleep while the map is hidden or the app is in the background.
+                active.first { it }
+                _trains.value = compute(System.currentTimeMillis())
                 withTimeoutOrNull(if (positionsWanted) TICK_MILLIS else LIST_TICK_MILLIS) { wake.receive() }
             }
         }
@@ -221,6 +276,9 @@ class LiveMapViewModel @Inject constructor(
      * switching one on loads it at once.
      */
     fun showModes(modes: Set<String>?) { groups.value = LiveGroup.forModes(modes) }
+
+    /** The map's "Stations" button. */
+    fun showStations(on: Boolean) { stationsWanted.value = on }
 
     /** Called when the screen becomes visible (and the app is in the foreground): resume fetching/updating. */
     fun resume() { active.value = true; wake.trySend(Unit) }
@@ -255,12 +313,14 @@ class LiveMapViewModel @Inject constructor(
         val out = ArrayList<TrainPosition>(segs.size)
         val p = DoubleArray(2)
         for (s in segs) {
-            if (s.mode !in SHOWN_MODES || now < s.departureMs || now > s.arrivalMs) continue
+            // Shown from standing at its stop (see LiveMotion) until it arrives at the next.
+            if (s.mode !in SHOWN_MODES || now < s.standFromMs || now > s.arrivalMs) continue
             if (!withPositions) {
                 out += s.toTrain(0.0, 0.0, current.cityId ?: CITY_OTHER)
                 continue
             }
-            val fraction = (now - s.departureMs).toDouble() / (s.arrivalMs - s.departureMs).toDouble()
+            // Speeding up, steady, braking; 0 while it still stands at its stop.
+            val fraction = LiveMotion.distanceFraction(now - s.departureMs, s.arrivalMs - s.departureMs, s.mode)
             val track = if (s.shapeKey.isNotEmpty()) shapes.track(s.shapeKey) else null
             when {
                 track != null -> track.pointAt(fraction, p)
@@ -318,9 +378,14 @@ class LiveMapViewModel @Inject constructor(
         _routes.value = emptyMap()
         if (src !is Source.City) return
         // Saved routes first (instant), then the server set if the saved one is old.
-        routeByKey.putAll(routeStore.cached(scope).filterKeys(::hasRouteLine))
-        publishRoutes()
+        // In a job of its own: the caller (collectLatest) can be cancelled at any time
+        // (a filter button tapped at once), and with routeScope already set a cancelled
+        // load would never be done again, leaving the map without lines.
         viewModelScope.launch {
+            val saved = routeStore.cached(scope)
+            if (routeScope != scope) return@launch
+            routeByKey.putAll(saved.filterKeys(::hasRouteLine))
+            publishRoutes()
             val fresh = routeStore.refreshIfStale(scope)
             if (routeScope != scope) return@launch
             if (fresh != null) {

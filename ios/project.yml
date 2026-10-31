@@ -46,6 +46,13 @@ targets:
           - "GoogleService-Info.plist"
       - path: MVVTracker/GoogleService-Info.plist
         buildPhase: resources
+      # The line routes and station dots of every city, shipped with the app: the
+      # same files as Android's assets (tools/bundle_map_data.js writes them), copied
+      # as the folder "mapdata". Optional: without it the app downloads them.
+      - path: ../app/src/main/assets/mapdata
+        type: folder
+        buildPhase: resources
+        optional: true
     entitlements:
       path: MVVTracker/Resources/MVVTracker.entitlements
       properties:
@@ -58,8 +65,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mvvtracker.app
         PRODUCT_NAME: Train2Track
-        MARKETING_VERSION: "0.6.0"
-        CURRENT_PROJECT_VERSION: "17"
+        MARKETING_VERSION: "0.6.2"
+        CURRENT_PROJECT_VERSION: "19"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MVVTracker/Resources/Info.plist
         TARGETED_DEVICE_FAMILY: "1"

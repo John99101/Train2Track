@@ -115,9 +115,17 @@ class ReportCityTest {
     fun `a view outside the cities belongs to no city`() {
         // Zoomed out around Dresden.
         assertEquals(null, cityForView(51.6, 50.4, 14.4, 13.1))
-        // A view of normal size that sticks out of the region is a free map area, as before.
+        // A view whose centre is beyond the edge of the region is a free map area.
         val m = city("muenchen")
-        assertEquals(null, cityForView(m.north + 0.1, m.north - 0.3, m.longitude + 0.2, m.longitude - 0.2))
+        assertEquals(null, cityForView(m.north + 0.3, m.north - 0.1, m.longitude + 0.2, m.longitude - 0.2))
         assertEquals(null, cityForBox(m.latitude + 0.6, m.latitude - 0.4, m.longitude + 0.4, m.longitude - 0.4))
+    }
+
+    @Test
+    fun `a view that sticks out of the region stays with the city while its centre is inside`() {
+        // Moved south of München along the S7 (30 October 2026): the lines used to vanish.
+        val m = city("muenchen")
+        assertEquals("muenchen", cityForView(m.south + 0.25, m.south - 0.15, m.longitude + 0.2, m.longitude - 0.2)?.id)
+        assertEquals("muenchen", cityForView(m.north + 0.1, m.north - 0.3, m.longitude + 0.2, m.longitude - 0.2)?.id)
     }
 }

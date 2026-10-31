@@ -5,15 +5,18 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
+import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Path
 
 /**
  * The Train2Track server's station API (functions/lib/stations.js). Nothing is
- * loaded in advance and nothing goes on the map: a search when the rider types,
- * one station's departures when the rider opens it.
+ * loaded in advance: a search when the rider types, one station's departures when
+ * the rider opens it, the station dots once the rider switches them on.
  */
 interface StationApiService {
     /** Stations of the city whose name matches [text] (2 to 40 characters). */
@@ -23,6 +26,59 @@ interface StationApiService {
     /** The next departures at [stopId]. */
     @GET("api/station/{city}/{stop}")
     suspend fun station(@Path("city") cityId: String, @Path("stop") stopId: String): StationDto
+
+    /**
+     * The city's stations for the map's "Stations" button. Only asked once the
+     * rider switched the button on, then kept on the phone for days (see [MapStationStore]).
+     */
+    @GET("api/stops/{city}")
+    suspend fun mapStations(@Path("city") cityId: String, @Header("If-None-Match") etag: String? = null): Response<MapStationsDto>
+}
+
+/**
+ * stations: [name, lat, lon, bits, id]; bits = the map buttons of the lines that
+ * stop there (see [MapGroups]). complete = false while the server is still
+ * collecting the stations of some lines: then the phone asks again sooner.
+ */
+@Serializable
+data class MapStationsDto(
+    val v: Int = 1,
+    val city: String = "",
+    val built: Long = 0,
+    val complete: Boolean = true,
+    val stations: List<JsonArray> = emptyList()
+)
+
+/** The map's filter buttons as bits, the same as the server's MAP_GROUP_BITS. */
+object MapGroups {
+    const val SBAHN = 1
+    const val UBAHN = 2
+    const val TRAM = 4
+    const val BUS = 8
+    const val RAIL = 16
+
+    /** The modes the station page shows symbols for (the timetable's names, as in [StationRef.modes]). */
+    fun modes(bits: Int): List<String> = buildList {
+        if (bits and SBAHN != 0) add("SUBURBAN")
+        if (bits and UBAHN != 0) add("SUBWAY")
+        if (bits and TRAM != 0) add("TRAM")
+        if (bits and BUS != 0) add("BUS")
+        if (bits and RAIL != 0) add("REGIONAL_RAIL")
+    }
+}
+
+/** A station dot on the map. */
+data class MapStation(val id: String, val name: String, val lat: Double, val lon: Double, val bits: Int)
+
+private fun JsonArray.dbl(i: Int): Double? = (getOrNull(i) as? JsonPrimitive)?.takeIf { it !is JsonNull }?.doubleOrNull
+
+fun MapStationsDto.toMapStations(): List<MapStation> = stations.mapNotNull { row ->
+    val name = row.str(0)
+    val lat = row.dbl(1) ?: return@mapNotNull null
+    val lon = row.dbl(2) ?: return@mapNotNull null
+    val bits = row.int(3)
+    val id = row.str(4)
+    if (name.isBlank() || id.isBlank() || bits == 0) null else MapStation(id, name, lat, lon, bits)
 }
 
 /** stations: [id, name, modes] */

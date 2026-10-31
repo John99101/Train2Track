@@ -63,7 +63,7 @@ private sealed class Dest(val route: String, val label: String) {
     data object Feed : Dest("feed", "Feed")
     data object Map : Dest("map", "Map")
     data object Stations : Dest("stations", "Stations")
-    // One station's departures, opened from the Stations tab.
+    // One station's departures, opened from the Stations tab or a dot on the Map.
     data object Station : Dest("station?id={id}&name={name}&city={city}&modes={modes}", "Station")
     // Report has no tab; it's reached by tapping a train.
     data object Report : Dest("report?line={line}&trip={trip}&station={station}&mode={mode}&city={city}", "Report")
@@ -123,11 +123,13 @@ fun AppNavigation() {
     // The tab a train's report was opened from (Feed or Map), so that tab stays
     // highlighted on the report and tapping it leads back.
     var reportOrigin by rememberSaveable { mutableStateOf(Dest.Feed.route) }
+    // The same for a station's departures: the Stations tab, or the Map (a station dot).
+    var stationOrigin by rememberSaveable { mutableStateOf(Dest.Stations.route) }
     // The tab the current screen belongs to (the report, the two legal pages and
     // the data sources page have no tab of their own).
     val currentTabRoute = when (currentRoute) {
         Dest.Report.route -> reportOrigin
-        Dest.Station.route -> Dest.Stations.route
+        Dest.Station.route -> stationOrigin
         Dest.Privacy.route, Dest.Legal.route, Dest.About.route -> Dest.Settings.route
         else -> currentRoute
     }
@@ -192,13 +194,20 @@ fun AppNavigation() {
                     onTrainClick = { line, tripId, station, mode, city ->
                         reportOrigin = Dest.Map.route
                         navController.navigate(reportRoute(line, tripId, station, mode, city))
+                    },
+                    onStationClick = {
+                        stationOrigin = Dest.Map.route
+                        navController.navigate(stationRoute(it))
                     }
                 )
             }
             composable(Dest.Stations.route) {
                 StationsScreen(
                     citySelectionViewModel = citySelectionViewModel,
-                    onOpen = { navController.navigate(stationRoute(it)) }
+                    onOpen = {
+                        stationOrigin = Dest.Stations.route
+                        navController.navigate(stationRoute(it))
+                    }
                 )
             }
             composable(
@@ -220,7 +229,7 @@ fun AppNavigation() {
                     station = station,
                     onBack = { navController.popBackStack() },
                     onOpenTrain = { line, tripId, stationName, mode, city ->
-                        reportOrigin = Dest.Stations.route
+                        reportOrigin = stationOrigin
                         navController.navigate(reportRoute(line, tripId, stationName, mode, city))
                     }
                 )

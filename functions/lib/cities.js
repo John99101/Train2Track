@@ -36,4 +36,11 @@ function cityBox(id) {
   };
 }
 
-module.exports = { CITIES, HALF_LAT, HALF_LON, cityBox };
+/** True when the point lies in the city's region (a little margin for stations on its edge). */
+function inRegion(cityId, lat, lon) {
+  const c = CITIES[cityId];
+  if (!c || typeof lat !== "number" || typeof lon !== "number") return false;
+  return Math.abs(lat - c.lat) <= HALF_LAT + 0.05 && Math.abs(lon - c.lon) <= HALF_LON + 0.05;
+}
+
+module.exports = { CITIES, HALF_LAT, HALF_LON, cityBox, inRegion };

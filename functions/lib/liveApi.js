@@ -7,13 +7,18 @@
  *                           liveGroups.js), with an ETag: a request with a matching
  *                           If-None-Match gets "304 Not Modified" without a body
  *   GET /api/shapes/{city}  track geometries by key    CDN cached 10 min
- *   GET /api/routes/{city}  full line routes           CDN cached 6 h
+ *   GET /api/routes/{city}  full line routes           CDN cached 6 h, with an ETag (304)
  *   GET /api/route/{city}/{mode}/{label}/{tripId}
  *                           one line the set lacks     asked from transitous once, then stored
  *   GET /api/stations/{city}/{text}
  *                           station search             CDN cached 1 day (see stations.js)
  *   GET /api/station/{city}/{stopId}
  *                           departures of a station    CDN cached 30 s
+ *   GET /api/stops/{city}   the stations for the map   CDN cached 6 h, with an ETag (304)
+ *
+ * A line route is a list of pieces: the whole route of one journey, then only
+ * the parts other journeys add (branches, the other end of short runs), see
+ * lineGeometry.js. App versions up to 0.6.0 draw the first piece only.
  *
  * The CDN in front means transitous is asked about once per city per ~20 s no
  * matter how many devices are open. The apps never ask transitous for a route
@@ -22,8 +27,10 @@
  * snapshot, so a short transitous outage serves slightly older data (flagged
  * "stale") instead of failing.
  */
+const crypto = require("crypto");
 const zlib = require("zlib");
 const T = require("./transitous");
+const G = require("./lineGeometry");
 const { GROUPS, splitLive, liveHash } = require("./liveGroups");
 const { CITIES } = require("./cities");
 const S = require("./stations");
@@ -32,7 +39,7 @@ const LIVE_TTL_MS = 15 * 1000;
 const LIVE_STALE_MAX_MS = 10 * 60 * 1000;
 const SHAPES_TTL_MS = 10 * 60 * 1000;
 const ROUTES_TTL_MS = 30 * 60 * 1000;
-// The sets are topped up once a week (refreshRoutes). Only when that has not
+// The sets are topped up every day (refreshRoutes). Only when that has not
 // happened for this long does a request top a set up itself.
 const ROUTES_MAX_AGE_MS = 21 * 24 * 3600 * 1000;
 // A line whose route could not be built is not tried again for this long.
@@ -50,11 +57,41 @@ const CC_ERROR = "public, max-age=5, s-maxage=5";
 const CC_STATIONS = "public, max-age=3600, s-maxage=86400";
 const CC_STATION = "public, max-age=20, s-maxage=30";
 const CC_STATION_MISS = "public, max-age=60, s-maxage=300";
+const CC_STOPS = "public, max-age=3600, s-maxage=21600";
 
 const STATIONS_TTL_MS = 6 * 3600 * 1000;
 const STATION_TTL_MS = 25 * 1000;
 // Search texts and stations are many: each cache keeps only the newest this many.
 const MAX_CACHED = 2000;
+
+// Questions to transitous that no cache answers (station search and departures):
+// per server instance at most UPSTREAM_PER_SECOND on average and UPSTREAM_BURST at
+// once. Beyond that the app gets 429 and tries again later, so a script cannot
+// make this server flood transitous, which could block the app's name for everyone.
+const UPSTREAM_PER_SECOND = 5;
+const UPSTREAM_BURST = 20;
+// A station or search transitous could not answer is not asked again this soon.
+const FAILED_TTL_MS = 60 * 1000;
+const CC_BUSY = "public, max-age=5, s-maxage=5";
+// A search that found nothing: kept only briefly, it may have been a hiccup.
+const CC_STATIONS_EMPTY = "public, max-age=60, s-maxage=300";
+
+/** Thrown when the budget for transitous is used up: the request gets 429. */
+class Busy extends Error {}
+
+/** A token bucket: take(n) says whether n more questions fit right now. */
+function budget(perSecond, burst, now = () => Date.now()) {
+  let tokens = burst;
+  let at = now();
+  return (n = 1) => {
+    const t = now();
+    tokens = Math.min(burst, tokens + ((t - at) * perSecond) / 1000);
+    at = t;
+    if (tokens < n) return false;
+    tokens -= n;
+    return true;
+  };
+}
 
 class Entry {
   constructor(obj) {
@@ -106,6 +143,25 @@ function send(req, res, entry, cacheControl, status = 200) {
   }
 }
 
+/**
+ * send() with an ETag made from what the apps use of the answer ([part] of it, not
+ * when it was built): an app that already has it gets "304 Not Modified" without
+ * a body. The route set and the station list rarely change, so the phone's daily
+ * check costs almost nothing.
+ */
+function sendTagged(req, res, entry, cacheControl, part) {
+  if (!entry.tag) {
+    entry.tag = crypto.createHash("sha1").update(JSON.stringify(part(entry.obj))).digest("base64url").slice(0, 16);
+  }
+  res.set("ETag", `W/"${entry.tag}"`);
+  if (etagMatches(req.get("if-none-match"), entry.tag)) {
+    res.set("Cache-Control", cacheControl);
+    res.set("Vary", "Accept-Encoding");
+    return res.status(304).end();
+  }
+  return send(req, res, entry, cacheControl);
+}
+
 /** True when an If-None-Match header names the ETag of [hash] (weak or strong, or "*"). */
 function etagMatches(header, hash) {
   if (!header) return false;
@@ -120,25 +176,25 @@ function sendError(res, status, error) {
   res.status(status).json({ error });
 }
 
-// ---- Route storage (Firestore: route_cache/{city} + chunks/{i}) -------------
+// ---- Route storage -----------------------------------------------------------
+// Firestore route_cache/{city}, with three lists in numbered chunk documents:
+//   chunks/{i}     the line rows [label, mode, colour, piece, piece...]
+//   stations/{i}   the stations [id, name, lat, lon, rank]
+//   linestops/{i}  which stations each line stops at ["mode|label", [ids]]
+// Sets stored before the stations existed have only the first list.
 
-async function loadStoredRoutes(db, city) {
-  const ref = db.collection("route_cache").doc(city);
-  const meta = await ref.get();
-  if (!meta.exists) return null;
-  const chunks = await ref.collection("chunks").get();
+const STORED_LISTS = ["chunks", "stations", "linestops"];
+
+async function loadChunks(ref, name) {
+  const snap = await ref.collection(name).get();
   const rows = [];
-  chunks.docs
+  snap.docs
     .sort((a, b) => Number(a.id) - Number(b.id))
     .forEach((d) => rows.push(...JSON.parse(d.get("rows") || "[]")));
-  // Long distance lines stored by earlier versions are left out (see ROUTE_MODES);
-  // the next save of the set drops them for good.
-  const local = rows.filter((r) => T.ROUTE_MODES.has(r[1]));
-  return { built: meta.get("built") || 0, complete: meta.get("complete") !== false, routes: local };
+  return rows;
 }
 
-/** [built] = when the set was last built or topped up as a whole (not: one line added). */
-async function saveRoutes(db, city, rows, complete, built = Date.now()) {
+function toChunks(rows) {
   const chunks = [];
   let cur = [];
   let size = 0;
@@ -153,27 +209,59 @@ async function saveRoutes(db, city, rows, complete, built = Date.now()) {
     size += s;
   }
   if (cur.length) chunks.push(cur);
+  return chunks;
+}
 
+async function loadStoredRoutes(db, city) {
   const ref = db.collection("route_cache").doc(city);
-  const old = await ref.collection("chunks").get();
+  const meta = await ref.get();
+  if (!meta.exists) return null;
+  const [rows, stations, lineStops] = await Promise.all(STORED_LISTS.map((name) => loadChunks(ref, name)));
+  // Long distance lines stored by earlier versions are left out (see ROUTE_MODES);
+  // the next save of the set drops them for good.
+  const local = rows.filter((r) => T.ROUTE_MODES.has(r[1]));
+  return {
+    built: meta.get("built") || 0,
+    complete: meta.get("complete") !== false,
+    routes: local,
+    stations,
+    lineStops,
+  };
+}
+
+/**
+ * Stores a set { rows, stations, lineStops }. [built] = when the set was last
+ * built or topped up as a whole (not: one line added).
+ */
+async function saveRoutes(db, city, set, complete, built = Date.now()) {
+  const lists = { chunks: set.rows, stations: set.stations || [], linestops: set.lineStops || [] };
+  const ref = db.collection("route_cache").doc(city);
   const batch = db.batch();
-  old.docs.forEach((d) => { if (Number(d.id) >= chunks.length) batch.delete(d.ref); });
-  chunks.forEach((c, i) => batch.set(ref.collection("chunks").doc(String(i)), { rows: JSON.stringify(c) }));
-  batch.set(ref, { v: 1, built, count: rows.length, chunks: chunks.length, complete });
+  const counts = {};
+  for (const name of STORED_LISTS) {
+    const chunks = toChunks(lists[name]);
+    counts[name] = chunks.length;
+    const old = await ref.collection(name).get();
+    old.docs.forEach((d) => { if (Number(d.id) >= chunks.length) batch.delete(d.ref); });
+    chunks.forEach((c, i) => batch.set(ref.collection(name).doc(String(i)), { rows: JSON.stringify(c) }));
+  }
+  batch.set(ref, {
+    v: 2, built, count: set.rows.length, chunks: counts.chunks, stations: lists.stations.length, complete,
+  });
   await batch.commit();
 }
 
 /**
- * Tops up a city's route set with the lines it does not have yet (or, with
- * full = true, fetches every running line anew) and stores it. Returns
- * { rows, asked }: the set, and for how many journeys transitous was asked.
+ * Brings a city's route set up to date (see transitous.buildRoutes: new lines,
+ * missing branches, stations) or, with full = true, fetches every running line
+ * anew, and stores it. Returns { rows, asked, complete }: the lines, for how many
+ * journeys transitous was asked, and whether all was done before the deadline.
  */
 async function rebuildCityRoutes(db, city, { deadlineMs = Infinity, full = false } = {}) {
   const prev = await loadStoredRoutes(db, city);
-  const { rows, asked } = await T.buildRoutes(city, prev ? prev.routes : [], { deadlineMs, full });
-  const complete = Date.now() <= deadlineMs;
-  await saveRoutes(db, city, rows, complete);
-  return { rows, asked };
+  const set = await T.buildRoutes(city, prev || {}, { deadlineMs, full });
+  await saveRoutes(db, city, set, set.complete);
+  return { rows: set.rows, asked: set.asked, complete: set.complete };
 }
 
 const findRoute = (rows, mode, label) => rows.find((r) => r[0] === label && r[1] === mode) || null;
@@ -209,6 +297,7 @@ function createApi({ db, logger }) {
   // it gets "not modified".
   const groupSplits = new WeakMap();   // whole snapshot Entry -> its groups
   const groupLatest = new Map();       // "city|group" -> { hash, entry }
+  const groupHashes = new WeakMap();   // group snapshot -> its liveHash
 
   async function handleLiveGroup(req, res, city, group) {
     const { entry, cacheControl } = await liveSnapshot(city);
@@ -219,7 +308,11 @@ function createApi({ db, logger }) {
     }
     const obj = groups[group];
     const key = `${city}|${group}`;
-    const hash = liveHash(obj);
+    let hash = groupHashes.get(obj);
+    if (hash === undefined) {
+      hash = liveHash(obj);
+      groupHashes.set(obj, hash);
+    }
     let latest = groupLatest.get(key);
     if (!latest || latest.hash !== hash) {
       latest = { hash, entry: new Entry(obj) };
@@ -254,11 +347,20 @@ function createApi({ db, logger }) {
   async function handleRoutes(req, res, city) {
     const e = await routeSet(city);
     if (!e.obj.routes.length) return sendError(res, 503, "routes_unavailable");
-    return send(req, res, e, CC_ROUTES);
+    return sendTagged(req, res, e, CC_ROUTES, (o) => o.routes);
   }
 
   // ---- One line on demand ----------------------------------------------------
   const lineMisses = new Map();     // "city|mode|label" -> when its route could not be built
+  const routeEntries = new WeakMap();   // a stored row -> its packed answer
+  const cityChains = new Map();     // city -> the last change of its stored set (one at a time)
+
+  /** Runs [fn] after the city's previous change to its stored set, so two never overwrite each other here. */
+  function withCityLock(city, fn) {
+    const run = (cityChains.get(city) || Promise.resolve()).then(fn, fn);
+    cityChains.set(city, run.catch(() => {}));
+    return run;
+  }
   const lineInflight = new Map();   // the same key -> the request that is fetching it
 
   /**
@@ -283,19 +385,34 @@ function createApi({ db, logger }) {
       if (line < 0 || !snap.segs.some((s) => s[0] === line && s[1] === trip)) return null;
 
       // Another server instance may have stored the line in the meantime.
+      return withCityLock(city, () => storeLine(city, mode, label, trip, snap, line, key));
+    })().finally(() => lineInflight.delete(key));
+    lineInflight.set(key, pending);
+    return pending;
+  }
+
+  /** Adds the line [label] of [mode] to the city's stored set (see lineRoute). */
+  async function storeLine(city, mode, label, trip, snap, line, key) {
+    {
       const stored = await loadStoredRoutes(db, city);
-      const rows = stored ? stored.routes : [];
+      let rows = stored ? stored.routes : [];
       let row = findRoute(rows, mode, label);
       if (!row) {
-        const poly = await T.tripRoute(trip).catch(() => null);
-        if (!poly) {
+        const d = await T.tripDetails(trip).catch(() => null);
+        if (!d) {
           lineMisses.set(key, Date.now());
           return null;
         }
-        row = [label, mode, snap.lines[line][2] || "", poly];
-        rows.push(row);
+        // The line with its stations, as a build would add it.
+        const maps = T.routeMaps(stored || {});
+        row = [label, mode, snap.lines[line][2] || ""];
+        G.extendRow(row, d.points);
+        maps.rows.set(`${mode}|${label}`, row);
+        T.addStops(city, mode, `${mode}|${label}`, d.stops, maps.stations, maps.lineStops);
+        const set = T.routeArrays(maps);
+        rows = set.rows;
         // built stays as it was (0 for a new set): adding one line is not a build.
-        await saveRoutes(db, city, rows, stored ? stored.complete : false, stored ? stored.built : 0);
+        await saveRoutes(db, city, set, stored ? stored.complete : false, stored ? stored.built : 0);
         logger.info(`route ${city} ${mode} ${label}: added on demand`);
       }
       // Later requests of this instance find the line in memory. A set that has
@@ -304,40 +421,91 @@ function createApi({ db, logger }) {
         routes.entries.set(city, new Entry({ v: 1, city, built: stored.built, routes: rows }));
       }
       return row;
-    })().finally(() => lineInflight.delete(key));
-    lineInflight.set(key, pending);
-    return pending;
+    }
   }
 
   // ---- Stations (see stations.js) ---------------------------------------------
   const stationSearch = new Cache(MAX_CACHED);
   const stationInfo = new Cache(MAX_CACHED);
+  const upstream = budget(UPSTREAM_PER_SECOND, UPSTREAM_BURST);
+  const failed = new Map();   // "kind|city|key" -> when transitous could not answer it
+
+  function recentlyFailed(key) {
+    const at = failed.get(key);
+    return at !== undefined && Date.now() - at < FAILED_TTL_MS;
+  }
+  function noteFailure(key) {
+    failed.delete(key);
+    failed.set(key, Date.now());
+    if (failed.size > MAX_CACHED) failed.delete(failed.keys().next().value);
+  }
 
   async function handleStations(req, res, city, text) {
     const q = S.normalizeQuery(text);
     if (!q) return sendError(res, 400, "bad_query");
+    const key = `${city}|${q}`;
+    if (recentlyFailed(`s|${key}`)) return sendError(res, 502, "upstream_unavailable");
     // Asked twice: as typed, and with the city's name in front. The geocoder ranks
     // by name, so "hauptbahnhof" alone finds the Hauptbahnhof of other cities first
     // and only "München hauptbahnhof" finds München Hbf.
-    const e = await stationSearch.load(`${city}|${q}`, STATIONS_TTL_MS, async () => {
-      const name = CITIES[city].name.toLowerCase();
-      const [plain, withCity] = await Promise.all([
-        T.searchStops(city, q),
-        q.includes(name) ? [] : T.searchStops(city, `${name} ${q}`).catch(() => []),
-      ]);
-      return S.compactStations(city, [...plain, ...withCity], q);
-    });
+    let e;
+    try {
+      e = await stationSearch.load(key, STATIONS_TTL_MS, async () => {
+        const name = CITIES[city].name.toLowerCase();
+        const both = !q.includes(name);
+        if (!upstream(both ? 2 : 1)) throw new Busy();
+        let partial = false;
+        const [plain, withCity] = await Promise.all([
+          T.searchStops(city, q),
+          both ? T.searchStops(city, `${name} ${q}`).catch(() => { partial = true; return []; }) : [],
+        ]);
+        return { ...S.compactStations(city, [...plain, ...withCity], q), partial };
+      });
+    } catch (err) {
+      if (!(err instanceof Busy)) noteFailure(`s|${key}`);
+      throw err;
+    }
+    // Half an answer (the second search failed) or none at all may be a hiccup:
+    // not kept here, and kept only briefly by the CDN.
+    if (e.obj.partial || !e.obj.stations.length) {
+      stationSearch.entries.delete(key);
+      return send(req, res, e, e.obj.partial ? CC_ERROR : CC_STATIONS_EMPTY);
+    }
     return send(req, res, e, CC_STATIONS);
+  }
+
+  /**
+   * The stations for the map's "Stations" button, from the stored route set. Only
+   * downloaded by an app that switched the button on, then kept for days.
+   */
+  const mapStations = new Cache();
+  async function handleStops(req, res, city) {
+    const e = await mapStations.load(city, ROUTES_TTL_MS, async () => {
+      const stored = await loadStoredRoutes(db, city);
+      return S.compactMapStations(city, stored || {});
+    });
+    // Not collected yet (a set from before the stations): the daily run fills it.
+    if (!e.obj.stations.length) return sendError(res, 503, "stops_unavailable");
+    return sendTagged(req, res, e, CC_STOPS, (o) => [o.complete, o.stations]);
   }
 
   async function handleStation(req, res, city, stopId) {
     if (!S.validStopId(stopId)) return sendError(res, 404, "unknown_station");
-    const e = await stationInfo.load(`${city}|${stopId}`, STATION_TTL_MS, async () => {
-      const obj = S.compactDepartures(city, await T.stopTimes(stopId));
-      // Only stations of this city: the server is no free timetable service for anywhere.
-      if (!S.inRegion(city, obj.lat, obj.lon)) return { v: 1, city, missing: true };
-      return obj;
-    });
+    const key = `${city}|${stopId}`;
+    if (recentlyFailed(`d|${key}`)) return sendError(res, 502, "upstream_unavailable");
+    let e;
+    try {
+      e = await stationInfo.load(key, STATION_TTL_MS, async () => {
+        if (!upstream(1)) throw new Busy();
+        const obj = S.compactDepartures(city, await T.stopTimes(stopId));
+        // Only stations of this city: the server is no free timetable service for anywhere.
+        if (!S.inRegion(city, obj.lat, obj.lon)) return { v: 1, city, missing: true };
+        return obj;
+      });
+    } catch (err) {
+      if (!(err instanceof Busy)) noteFailure(`d|${key}`);
+      throw err;
+    }
     if (e.obj.missing) {
       res.set("Cache-Control", CC_STATION_MISS);
       return res.status(404).json({ error: "unknown_station" });
@@ -353,7 +521,13 @@ function createApi({ db, logger }) {
       res.set("Cache-Control", CC_ROUTE_MISS);
       return res.status(404).json({ error: "route_unavailable" });
     }
-    return send(req, res, new Entry({ v: 1, city, route: row }), CC_ROUTE);
+    // One packed answer per stored row, not one per request.
+    let entry = routeEntries.get(row);
+    if (!entry) {
+      entry = new Entry({ v: 1, city, route: row });
+      routeEntries.set(row, entry);
+    }
+    return send(req, res, entry, CC_ROUTE);
   }
 
   return async (req, res) => {
@@ -363,18 +537,24 @@ function createApi({ db, logger }) {
     // the cache and make this function do the full work: refuse it cheaply.
     if (req.originalUrl.includes("?")) return sendError(res, 400, "no_query");
     // Through Hosting the path keeps its /api prefix; called directly it does not.
+    // One address per resource: a doubled or trailing slash, or an escaped city or
+    // group name, would be another address for the same data that skips the CDN.
+    const raw = req.path.replace(/^\/api(?=\/|$)/, "");
+    if (raw.includes("//") || (raw.length > 1 && raw.endsWith("/"))) return sendError(res, 404, "not_found");
     let parts;
     try {
-      parts = req.path.replace(/^\/api(?=\/|$)/, "").split("/").filter(Boolean).map(decodeURIComponent);
+      parts = raw.split("/").filter(Boolean).map(decodeURIComponent);
     } catch (_) {
       return sendError(res, 404, "not_found");
     }
     const [kind, city] = parts;
+    if (["live", "shapes", "routes", "stops"].includes(kind) && raw.includes("%")) return sendError(res, 404, "not_found");
     const group = kind === "live" && parts.length === 3 ? parts[2] : null;
     const expected = kind === "route" ? 5 : group !== null || kind === "stations" || kind === "station" ? 3 : 2;
     if (parts.length !== expected) return sendError(res, 404, "not_found");
     if (group !== null && !GROUPS.includes(group)) return sendError(res, 404, "not_found");
-    if (!CITIES[city]) return sendError(res, 404, "unknown_city");
+    // Own keys only: "constructor" or "toString" are no cities.
+    if (!Object.hasOwn(CITIES, city)) return sendError(res, 404, "unknown_city");
     try {
       if (kind === "live" && group !== null) return await handleLiveGroup(req, res, city, group);
       if (kind === "live") return await handleLive(req, res, city);
@@ -383,8 +563,14 @@ function createApi({ db, logger }) {
       if (kind === "route") return await handleRoute(req, res, city, parts[2], parts[3], parts[4]);
       if (kind === "stations") return await handleStations(req, res, city, parts[2]);
       if (kind === "station") return await handleStation(req, res, city, parts[2]);
+      if (kind === "stops") return await handleStops(req, res, city);
       return sendError(res, 404, "not_found");
     } catch (err) {
+      if (err instanceof Busy) {
+        res.set("Retry-After", "5");
+        res.set("Cache-Control", CC_BUSY);
+        return res.status(429).json({ error: "busy" });
+      }
       logger.error(`${kind} ${city} failed: ${err.message}`);
       return sendError(res, 502, "upstream_unavailable");
     }

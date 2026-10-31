@@ -14,6 +14,8 @@ const { CITIES, cityBox } = require("./cities");
 // Träwelling (built by tools/build_line_colors.js).
 const LINE_COLORS = require("./lineColors.json");
 const polyline = require("./polyline");
+const G = require("./lineGeometry");
+const { inRegion } = require("./cities");
 const { version } = require("../package.json");
 
 const BASE = "https://api.transitous.org";
@@ -202,52 +204,179 @@ async function mapLimit(items, limit, fn) {
   return results;
 }
 
-/** Full route of one trip as a simplified precision 5 polyline, or null. */
-async function tripRoute(tripId) {
+/**
+ * One journey: its whole route (points, not simplified) and its stops as stations
+ * { id, name, lat, lon } (see lineGeometry.stationId). null when it has no route.
+ */
+async function tripDetails(tripId) {
   const resp = await getJson("/api/v1/trip", { tripId }, 20000);
-  const all = [];
+  const points = [];
+  const stops = [];
   for (const leg of resp.legs || []) {
     const g = leg.legGeometry;
-    if (!g || !g.points) continue;
-    for (const p of polyline.decode(g.points, g.precision || 6)) all.push(p);
+    if (g && g.points) for (const p of polyline.decode(g.points, g.precision || 6)) points.push(p);
+    for (const s of [leg.from, ...(leg.intermediateStops || []), leg.to]) {
+      if (!s || !s.name || typeof s.lat !== "number" || typeof s.lon !== "number") continue;
+      const id = G.stationId(s);
+      if (id) stops.push({ id, name: s.name, lat: round5(s.lat), lon: round5(s.lon) });
+    }
   }
-  if (all.length < 2) return null;
-  return polyline.encode(polyline.simplify(all, ROUTE_TOLERANCE_DEG), 5);
+  return points.length >= 2 ? { points, stops } : null;
 }
 
+/** Full route of one trip as a simplified precision 5 polyline, or null. */
+async function tripRoute(tripId) {
+  const d = await tripDetails(tripId);
+  return d ? polyline.encode(polyline.simplify(d.points, ROUTE_TOLERANCE_DEG), 5) : null;
+}
+
+// Where several lines stop at one station, the name and position come from the
+// highest of these (the rail platform rather than the bus stop in front).
+const STATION_RANK = { METRO: 3, SUBWAY: 3, REGIONAL_RAIL: 2, REGIONAL_FAST_RAIL: 2, RAIL: 2, TRAM: 1, BUS: 0 };
+
 /**
- * Line routes for the local lines currently running in the city, merged over the
- * [previous] routes, so lines that are not running right now (night, weekend
- * only lines) are kept.
- *
- * A line [previous] already has is NOT asked again: its route rarely changes, and
- * transitous must not be asked for thousands of journeys the server already
- * knows. Pass full = true to fetch every running line anew (the admin button).
- *
- * Returns { rows, asked }: rows [label, mode, colour, encodedPolyline], and for
- * how many journeys transitous was asked.
+ * Notes the stations of one journey of the line [key] ("mode|label"): in
+ * [stations] (id -> [id, name, lat, lon, rank]) and in [lineStops] (key -> Set of
+ * ids). Only stations in the city's region: the apps cannot open the others.
+ * A line in [lineStops] has had its stations collected, even if none were in the region.
  */
-async function buildRoutes(cityId, previous = [], { deadlineMs = Infinity, full = false } = {}) {
+function addStops(cityId, mode, key, stops, stations, lineStops) {
+  const rank = STATION_RANK[mode] || 0;
+  let ids = lineStops.get(key);
+  if (!ids) {
+    ids = new Set();
+    lineStops.set(key, ids);
+  }
+  for (const s of stops) {
+    if (!inRegion(cityId, s.lat, s.lon)) continue;
+    ids.add(s.id);
+    const known = stations.get(s.id);
+    if (!known || rank > known[4]) stations.set(s.id, [s.id, s.name, s.lat, s.lon, rank]);
+  }
+}
+
+/** A stored set as working maps: rows by "mode|label", stations by id, line stations as Sets. */
+function routeMaps(set = {}) {
+  return {
+    rows: new Map((set.routes || []).filter((row) => ROUTE_MODES.has(row[1])).map((row) => [`${row[1]}|${row[0]}`, row.slice()])),
+    stations: new Map((set.stations || []).map((s) => [s[0], s.slice()])),
+    lineStops: new Map((set.lineStops || []).map(([key, ids]) => [key, new Set(ids)])),
+  };
+}
+
+/** The working maps back as storable arrays (the lines that have a route). */
+function routeArrays(maps) {
+  return {
+    rows: [...maps.rows.values()].filter((row) => row.length >= 4),
+    stations: [...maps.stations.values()],
+    lineStops: [...maps.lineStops].map(([key, ids]) => [key, [...ids]]),
+  };
+}
+
+/** A vehicle's current hop as points: its track, else the straight line between its two stops. */
+function hopPoints(seg) {
+  const pts = seg.polyline ? polyline.decode(seg.polyline, 5) : [];
+  if (pts.length >= 2) return pts;
+  const f = seg.from, t = seg.to;
+  if (f && t && typeof f.lat === "number" && typeof t.lat === "number") return [[f.lat, f.lon], [t.lat, t.lon]];
+  return [];
+}
+
+// Per run, a line is asked for at most this many journeys, in at most this many rounds.
+const MAX_TRIPS_PER_LINE = 4;
+const MAX_PASSES = 4;
+
+/**
+ * Brings the line routes of the city's local lines up to date, from the vehicles
+ * running right now, over the [prev] set ({ routes, stations, lineStops } as
+ * stored), so lines that are not running now (night, weekend lines) are kept.
+ *
+ * transitous is asked for a journey only when it adds something:
+ *  - a line the set does not have: one of its journeys;
+ *  - a line whose stations were never collected (sets built before stations
+ *    existed): one of its journeys;
+ *  - a line with a vehicle on a part the line does not have (a branch, a short
+ *    run's other end): that vehicle's journey, which adds only the missing parts.
+ * A line that is complete costs nothing, so a daily run asks for a handful of
+ * journeys. Pass full = true to fetch every running line anew (the admin button).
+ *
+ * Returns { rows, stations, lineStops, asked, complete }: rows [label, mode,
+ * colour, piece, piece...] (encoded precision 5), how many journeys were asked,
+ * and whether everything was done before [deadlineMs].
+ */
+async function buildRoutes(cityId, prev = {}, { deadlineMs = Infinity, full = false } = {}) {
   const segs = await mapTrips(cityId, LIVE_WINDOW.from, LIVE_WINDOW.to);
-  const merged = new Map(previous.filter((row) => ROUTE_MODES.has(row[1])).map((row) => [`${row[1]}|${row[0]}`, row]));
-  const reps = new Map();   // "mode|label" -> { label, mode, color, tripId }
+  const maps = routeMaps(prev);
+  const running = new Map();   // "mode|label" -> { label, mode, color, hops: [{ tripId, seg }] }
   for (const seg of segs) {
     if (!ROUTE_MODES.has(seg.mode)) continue;
     const tripId = seg.trips && seg.trips[0] && seg.trips[0].tripId;
     if (!tripId) continue;
     const label = labelOf(seg);
     const key = `${seg.mode}|${label}`;
-    if (reps.has(key) || (!full && merged.has(key))) continue;
-    reps.set(key, { label, mode: seg.mode, color: lineColor(cityId, seg, label), tripId });
+    let line = running.get(key);
+    if (!line) {
+      line = { label, mode: seg.mode, color: lineColor(cityId, seg, label), hops: [] };
+      running.set(key, line);
+    }
+    line.hops.push({ tripId, seg });
   }
-  const todo = [...reps.values()];
-  const polys = await mapLimit(todo, 8, (r) =>
-    Date.now() > deadlineMs ? Promise.resolve(null) : tripRoute(r.tripId));
+  if (full) {
+    for (const key of running.keys()) {
+      maps.rows.delete(key);
+      maps.lineStops.delete(key);
+    }
+  }
 
-  todo.forEach((r, i) => {
-    if (polys[i]) merged.set(`${r.mode}|${r.label}`, [r.label, r.mode, r.color, polys[i]]);
-  });
-  return { rows: [...merged.values()], asked: todo.length };
+  const tried = new Map();   // key -> journeys asked in this run
+  let asked = 0;
+  let complete = true;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    const todo = [];
+    for (const [key, line] of running) {
+      const done = tried.get(key) || new Set();
+      if (done.size >= MAX_TRIPS_PER_LINE) continue;
+      const fresh = line.hops.filter((h) => !done.has(h.tripId));
+      if (!fresh.length) continue;
+      const row = maps.rows.get(key);
+      let hop = null;
+      if (!row || !maps.lineStops.has(key)) {
+        hop = fresh[0];
+      } else {
+        const index = G.lineIndex(row.slice(3).map((p) => polyline.decode(p, 5)));
+        hop = fresh.find((h) => !G.hopOnLine(index, hopPoints(h.seg))) || null;
+      }
+      if (hop) todo.push({ key, line, tripId: hop.tripId });
+    }
+    if (!todo.length) break;
+    if (Date.now() > deadlineMs) {
+      complete = false;
+      break;
+    }
+    // undefined = not asked (the deadline passed), null = transitous had no route.
+    const results = await mapLimit(todo, 8, (t) =>
+      Date.now() > deadlineMs ? Promise.resolve(undefined) : tripDetails(t.tripId));
+    todo.forEach((t, i) => {
+      if (results[i] === undefined) {
+        complete = false;
+        return;
+      }
+      asked++;
+      const done = tried.get(t.key) || new Set();
+      done.add(t.tripId);
+      tried.set(t.key, done);
+      const d = results[i];
+      if (!d) return;
+      let row = maps.rows.get(t.key);
+      if (!row) {
+        row = [t.line.label, t.line.mode, t.line.color];
+        maps.rows.set(t.key, row);
+      }
+      G.extendRow(row, d.points);
+      addStops(cityId, t.line.mode, t.key, d.stops, maps.stations, maps.lineStops);
+    });
+  }
+  return { ...routeArrays(maps), asked, complete };
 }
 
 /** Stops whose name matches [text], the ones near the city first (transitous geocoder). */
@@ -263,6 +392,6 @@ async function stopTimes(stopId, n = 30) {
 
 module.exports = {
   CITIES, SHOWN_MODES, ROUTE_MODES, USER_AGENT, LIVE_WINDOW, LIVE_STEP_MS,
-  shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, mapTrips,
-  searchStops, stopTimes,
+  shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, tripDetails, mapTrips,
+  searchStops, stopTimes, addStops, routeMaps, routeArrays,
 };

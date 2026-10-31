@@ -163,6 +163,9 @@
 "settings_delete_done" = "Deine Daten wurden gelöscht.";
 "settings_delete_failed" = "Das Löschen auf dem Server ist fehlgeschlagen. Bitte versuche es erneut oder schreib uns eine Mail.";
 "map_loading" = "Bahnen werden geladen…";
+"map_stations" = "Stationen";
+"map_stations_zoom" = "Zoome näher heran, um die Stationen zu sehen.";
+"map_stations_unavailable" = "Die Stationen konnten nicht geladen werden.";
 "report_subtitle" = "Teile aktuelle Informationen mit anderen Fahrgästen.";
 
 /* Admin console (only with the admin claim) */

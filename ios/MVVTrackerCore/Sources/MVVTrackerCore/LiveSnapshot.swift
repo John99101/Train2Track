@@ -23,17 +23,20 @@ public struct LiveSegment: Equatable, Sendable {
     public let delayMinutes: Int?
     public let isRealtime: Bool
     public let shapeKey: String
+    /// From this moment until it leaves, the vehicle stands at `fromName` (see `LiveMotion`).
+    public var standFromMs: Int64
 
     public init(tripId: String?, label: String, mode: String, colorHex: String?,
                 fromName: String?, toName: String?,
                 fromLat: Double, fromLon: Double, toLat: Double, toLon: Double,
                 departureMs: Int64, arrivalMs: Int64, delayMinutes: Int?, isRealtime: Bool,
-                shapeKey: String) {
+                shapeKey: String, standFromMs: Int64? = nil) {
         self.tripId = tripId; self.label = label; self.mode = mode; self.colorHex = colorHex
         self.fromName = fromName; self.toName = toName
         self.fromLat = fromLat; self.fromLon = fromLon; self.toLat = toLat; self.toLon = toLon
         self.departureMs = departureMs; self.arrivalMs = arrivalMs
         self.delayMinutes = delayMinutes; self.isRealtime = isRealtime; self.shapeKey = shapeKey
+        self.standFromMs = standFromMs ?? departureMs
     }
 
     public var hasStopCoordinates: Bool {
@@ -48,6 +51,7 @@ public struct LiveSegment: Equatable, Sendable {
             && a.toLat.bitPattern == b.toLat.bitPattern && a.toLon.bitPattern == b.toLon.bitPattern
             && a.departureMs == b.departureMs && a.arrivalMs == b.arrivalMs
             && a.delayMinutes == b.delayMinutes && a.isRealtime == b.isRealtime && a.shapeKey == b.shapeKey
+            && a.standFromMs == b.standFromMs
     }
 }
 
@@ -234,13 +238,15 @@ public enum LivePositions {
         var out: [TrainPosition] = []
         out.reserveCapacity(segments.count)
         for s in segments {
-            guard LiveMapConfig.railModes.contains(s.mode), nowMs >= s.departureMs, nowMs <= s.arrivalMs else { continue }
+            // Shown from standing at its stop (see LiveMotion) until it arrives at the next.
+            guard LiveMapConfig.railModes.contains(s.mode), nowMs >= s.standFromMs, nowMs <= s.arrivalMs else { continue }
             if !withPositions {
                 out.append(train(s, 0, 0))
                 continue
             }
-            let span = Double(s.arrivalMs - s.departureMs)
-            let fraction = span > 0 ? Double(nowMs - s.departureMs) / span : 0
+            // Speeding up, steady, braking; 0 while it still stands at its stop.
+            let fraction = LiveMotion.distanceFraction(elapsedMs: nowMs - s.departureMs,
+                                                       durationMs: s.arrivalMs - s.departureMs, mode: s.mode)
             let p: GeoPoint
             if !s.shapeKey.isEmpty, let t = track(s.shapeKey) {
                 p = t.pointAt(fraction)

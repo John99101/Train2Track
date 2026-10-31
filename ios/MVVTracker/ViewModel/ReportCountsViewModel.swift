@@ -20,8 +20,10 @@ final class ReportCountsViewModel: ObservableObject {
     private var delayListener: ListenerRegistration?
     private var occupancyListener: ListenerRegistration?
     private var occupancyVotes: [OccupancyVote] = []
-    /// Counts the votes again every minute, so votes older than 20 minutes drop out.
-    private var occupancyTicker: Timer?
+    private var delayVoteList: [UserReportBackend.DelayVote] = []
+    /// Counts the votes again every minute, so expired votes drop out (occupancy after
+    /// 20 minutes, delay votes after 30).
+    private var ticker: Timer?
     /// The report cities being loaded (see `reportScope` in MVVTrackerCore).
     private var cities: [String] = []
     private let own = OwnReportsStore.shared
@@ -62,7 +64,10 @@ final class ReportCountsViewModel: ObservableObject {
             Task { @MainActor in self?.trips = trips }
         }
         delayListener = UserReportBackend.shared.observeDelayVotes(cities: cities) { [weak self] votes in
-            Task { @MainActor in self?.delayVotes = votes }
+            Task { @MainActor in
+                self?.delayVoteList = votes
+                self?.recountDelays()
+            }
         }
         occupancyListener = UserReportBackend.shared.observeOccupancyVotes(cities: cities) { [weak self] votes in
             Task { @MainActor in
@@ -70,8 +75,11 @@ final class ReportCountsViewModel: ObservableObject {
                 self?.recountOccupancy()
             }
         }
-        occupancyTicker = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.recountOccupancy() }
+        ticker = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.recountOccupancy()
+                self?.recountDelays()
+            }
         }
     }
 
@@ -79,17 +87,21 @@ final class ReportCountsViewModel: ObservableObject {
         occupancy = OccupancyAggregation.aggregate(occupancyVotes, nowMs: Int64(Date().timeIntervalSince1970 * 1000))
     }
 
+    private func recountDelays() {
+        delayVotes = UserReportBackend.delayTally(delayVoteList, nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+
     func stop() {
         observation?.cancel(); observation = nil
         delayListener?.remove(); delayListener = nil
         occupancyListener?.remove(); occupancyListener = nil
-        occupancyTicker?.invalidate(); occupancyTicker = nil
+        ticker?.invalidate(); ticker = nil
     }
 
     deinit {
         observation?.cancel()
         delayListener?.remove()
         occupancyListener?.remove()
-        occupancyTicker?.invalidate()
+        ticker?.invalidate()
     }
 }

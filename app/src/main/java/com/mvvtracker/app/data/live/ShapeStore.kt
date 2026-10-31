@@ -81,12 +81,17 @@ class ShapeStore @Inject constructor(@ApplicationContext context: Context) {
         withContext(Dispatchers.IO) {
             writeLock.withLock {
                 val snapshot = keys.mapNotNull { k -> encoded[k]?.let { k to it } }.toMap()
-                dir.mkdirs()
-                val tmp = File(dir, "$cityId.json.tmp")
-                tmp.writeText(json.encodeToString(snapshot))
-                if (!tmp.renameTo(fileFor(cityId))) {
-                    fileFor(cityId).delete()
-                    tmp.renameTo(fileFor(cityId))
+                // A full disk only means the tracks are not kept for next time.
+                try {
+                    dir.mkdirs()
+                    val tmp = File(dir, "$cityId.json.tmp")
+                    tmp.writeText(json.encodeToString(snapshot))
+                    if (!tmp.renameTo(fileFor(cityId))) {
+                        fileFor(cityId).delete()
+                        tmp.renameTo(fileFor(cityId))
+                    }
+                } catch (e: java.io.IOException) {
+                    // Not kept; downloaded again next time.
                 }
             }
         }

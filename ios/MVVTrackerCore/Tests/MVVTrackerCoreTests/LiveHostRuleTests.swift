@@ -3,9 +3,11 @@ import XCTest
 
 final class LiveHostRuleTests: XCTestCase {
 
-    func testOnlyHttpsAddressesUnderTrain2TrackOrKeyCdnAreTaken() {
+    func testOnlyHttpsAddressesUnderTrain2TrackAreTaken() {
         XCTAssertEqual(LiveHostRule.cdnBase("https://api.example.invalid/")?.host, "api.example.invalid")
-        XCTAssertEqual(LiveHostRule.cdnBase(" https://t2t-1a2b.kxcdn.com ")?.host, "t2t-1a2b.kxcdn.com")
+        XCTAssertEqual(LiveHostRule.cdnBase(" https://cdn.example.invalid ")?.host, "cdn.example.invalid")
+        // The old KeyCDN test domain is no longer taken (Cloudflare since 30 October 2026).
+        XCTAssertNil(LiveHostRule.cdnBase("https://t2t-1a2b.kxcdn.com/"))
         XCTAssertNotNil(LiveHostRule.cdnBase("https://example.invalid/"))
         XCTAssertNil(LiveHostRule.cdnBase(nil))
         XCTAssertNil(LiveHostRule.cdnBase(""))

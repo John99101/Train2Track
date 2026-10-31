@@ -120,12 +120,22 @@ final class CityRegionTests: XCTestCase {
     func testViewOutsideTheCitiesBelongsToNoCity() {
         // Zoomed out around Dresden.
         XCTAssertNil(cityForView(north: 51.6, south: 50.4, east: 14.4, west: 13.1))
-        // A view of normal size that sticks out of the region is a free map area, as before.
+        // A view whose centre is beyond the edge of the region is a free map area.
         let m = germanCities.first { $0.id == "muenchen" }!
-        XCTAssertNil(cityForView(north: m.north + 0.1, south: m.north - 0.3,
+        XCTAssertNil(cityForView(north: m.north + 0.3, south: m.north - 0.1,
                                  east: m.longitude + 0.2, west: m.longitude - 0.2))
         XCTAssertNil(cityForBox(north: m.latitude + 0.6, south: m.latitude - 0.4,
                                 east: m.longitude + 0.4, west: m.longitude - 0.4))
+    }
+
+    /// Port of Android's `a view that sticks out of the region stays with the city while its centre is inside`.
+    func testAViewThatSticksOutOfTheRegionStaysWithTheCityWhileItsCentreIsInside() {
+        // Moved south of München along the S7 (30 October 2026): the lines used to vanish.
+        let m = germanCities.first { $0.id == "muenchen" }!
+        XCTAssertEqual("muenchen", cityForView(north: m.south + 0.25, south: m.south - 0.15,
+                                               east: m.longitude + 0.2, west: m.longitude - 0.2)?.id)
+        XCTAssertEqual("muenchen", cityForView(north: m.north + 0.1, south: m.north - 0.3,
+                                               east: m.longitude + 0.2, west: m.longitude - 0.2)?.id)
     }
 
     func testRouteKeyKeepsModesApart() {

@@ -119,7 +119,9 @@ class UserReportBackend @Inject constructor(
      * admins/server can read it (see firestore.rules); the whole collection can
      * be wiped for testing via functions/clearAnalytics.js.
      */
-    private suspend fun logControlEvent(event: SBahnEvent, city: String) {
+    private fun logControlEvent(event: SBahnEvent, city: String) {
+        // Not awaited: without a connection the write waits until one is back, and
+        // the report window would stay on "Sending" (Firestore sends it later).
         runCatching {
             firestore.collection(COLLECTION_CONTROL_LOG).add(
                 mapOf(
@@ -129,7 +131,7 @@ class UserReportBackend @Inject constructor(
                     "city" to city,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
-            ).await()
+            )
         }
     }
 
@@ -265,18 +267,40 @@ class UserReportBackend @Inject constructor(
      * counts, for the cities on screen. Lets the UI show crowd delay confidence.
      * Empty on any error.
      */
-    fun observeDelayVotes(): Flow<Map<String, Pair<Int, Int>>> =
-        docsInScope(COLLECTION_DELAY_VOTES).map { docs ->
-            docs
-                // Votes over the spam limit (flagged by the server) do not count.
-                .filter { it.getString("tripId") != null && it.getBoolean("throttled") != true }
-                .groupBy { it.getString("tripId")!! }
-                .mapValues { (_, votes) ->
-                    val confirm = votes.count { it.getString("vote") == DELAY_CONFIRM }
-                    val onTime = votes.count { it.getString("vote") == DELAY_ON_TIME }
-                    confirm to onTime
-                }
+    fun observeDelayVotes(): Flow<Map<String, Pair<Int, Int>>> = channelFlow {
+        var latest: List<DocumentSnapshot> = emptyList()
+        fun emit() {
+            val now = System.currentTimeMillis()
+            trySend(
+                latest
+                    // Votes over the spam limit (flagged by the server) and expired votes
+                    // do not count. Checked again every minute: the query's time is fixed
+                    // when it starts, so old votes would otherwise stay.
+                    .filter {
+                        it.getString("tripId") != null && it.getBoolean("throttled") != true &&
+                            (it.getTimestamp("expiresAt")?.toDate()?.time ?: Long.MAX_VALUE) > now
+                    }
+                    .groupBy { it.getString("tripId")!! }
+                    .mapValues { (_, votes) ->
+                        val confirm = votes.count { it.getString("vote") == DELAY_CONFIRM }
+                        val onTime = votes.count { it.getString("vote") == DELAY_ON_TIME }
+                        confirm to onTime
+                    }
+            )
         }
+        launch {
+            docsInScope(COLLECTION_DELAY_VOTES).collect { docs ->
+                latest = docs
+                emit()
+            }
+        }
+        launch {
+            while (true) {
+                delay(REEVALUATE_MILLIS)
+                emit()
+            }
+        }
+    }
 
     /**
      * "How full is it?": this rider's level on the journey, 1 (many seats free) to 5

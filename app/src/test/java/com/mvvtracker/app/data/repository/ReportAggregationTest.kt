@@ -50,6 +50,27 @@ class ReportAggregationTest {
         assertEquals(1, flagged(exit("b", now - 9000), exit("c", now - 8000), entry("a", now - 1000)))
     }
 
+    // 5 November 2026: two "has left" from others cleared the train on every phone but the reporter's.
+    @Test
+    fun ownReportFollowsTheSharedCountOnceTheTrainIsLoaded() {
+        val trips = ReportAggregation.aggregate(listOf(entry("me", now - 5000), exit("b", now - 2000), exit("c", now - 1000)), now)
+        assertEquals(emptyMap<String, Int>(), ReportAggregation.flaggedTrips(trips, ownActive = setOf(trip), minReports = 1))
+    }
+
+    @Test
+    fun ownReportShowsWhileTheTrainIsNotLoadedYet() {
+        val trips = ReportAggregation.aggregate(listOf(entry("a", now - 5000)), now)
+        assertEquals(mapOf(trip to 1, "T2" to 1), ReportAggregation.flaggedTrips(trips, ownActive = setOf("T2"), minReports = 1))
+        assertEquals(mapOf("T2" to 1), ReportAggregation.flaggedTrips(emptyMap(), ownActive = setOf("T2"), minReports = 1))
+    }
+
+    @Test
+    fun flaggedTrainsCarryHowManyRidersReportThem() {
+        val trips = ReportAggregation.aggregate(listOf(entry("a", now - 5000), entry("b", now - 4000), entry("c", now - 3000)), now)
+        assertEquals(mapOf(trip to 3), ReportAggregation.flaggedTrips(trips, ownActive = setOf(trip), minReports = 1))
+        assertEquals(emptyMap<String, Int>(), ReportAggregation.flaggedTrips(trips, ownActive = emptySet(), minReports = 4))
+    }
+
     @Test
     fun ownExitClearsOnlyForSelf() {
         assertEquals(0, flagged(entry("a", now - 5000), exit("me", now - 1000, own = true)))

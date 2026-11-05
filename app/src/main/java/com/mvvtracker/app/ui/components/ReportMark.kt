@@ -15,14 +15,27 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** The red of a reported journey, the same in the Feed, on the Map and on the report screen. */
+// The colours of the "!", by how many riders report the journey (see [reportColor]).
+// The same in the Feed, on the Map, on the train page and at the stations; iOS has
+// the same values in MVVTrackerCore (ReportColor.swift).
+val ReportOrange = Color(0xFFE65100)
+val ReportLightRed = Color(0xFFEF5350)
 val ReportRed = Color(0xFFDC2828)
+val ReportBrightRed = Color(0xFFFF1744)
 
-/** The red "!" that marks a journey with a current report. */
+/** 1 rider: orange (not confirmed yet); 2 to 5: light red; 6 to 10: red; 11 or more: bright red. */
+fun reportColor(riders: Int): Color = when {
+    riders <= 1 -> ReportOrange
+    riders <= 5 -> ReportLightRed
+    riders <= 10 -> ReportRed
+    else -> ReportBrightRed
+}
+
+/** The "!" that marks a journey with a current report, coloured by how many [riders] report it. */
 @Composable
-fun ReportMark(size: Dp = 24.dp, modifier: Modifier = Modifier) {
+fun ReportMark(riders: Int, size: Dp = 24.dp, modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.size(size).clip(CircleShape).background(ReportRed),
+        modifier = modifier.size(size).clip(CircleShape).background(reportColor(riders)),
         contentAlignment = Alignment.Center
     ) {
         Text("!", color = Color.White, fontSize = (size.value * 0.62f).sp, fontWeight = FontWeight.Bold)

@@ -93,9 +93,9 @@ fun ReportEventScreen(
     var movement by remember { mutableStateOf(MovementType.ENTERED) }
 
     // Is there a current report on this journey, and when and where was the newest made?
-    val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
+    val flaggedRiders by eventsViewModel.flaggedRiders.collectAsStateWithLifecycle()
     val reportedTrips by eventsViewModel.reportedTrips.collectAsStateWithLifecycle()
-    val flagged = tripId != null && tripId in flaggedTripIds
+    val reportedBy = tripId?.let { flaggedRiders[it] }
     val report = reportedTrips[tripId]?.takeIf { it.flagged > 0 }
     // The age is counted on the phone, so it also moves on while no new data arrives.
     val nowMs by produceState(System.currentTimeMillis()) {
@@ -187,13 +187,22 @@ fun ReportEventScreen(
                 }
                 // A current report on this journey: the same "!" as in the Feed and on
                 // the Map, with when and where the newest report was made.
-                if (flagged) {
+                if (reportedBy != null) {
                     Spacer(Modifier.width(12.dp))
                     Column(
                         horizontalAlignment = Alignment.End,
                         modifier = Modifier.widthIn(max = 170.dp)
                     ) {
-                        ReportMark(size = 28.dp)
+                        // How many riders report it, so the colour is not the only sign.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                pluralStringResource(R.plurals.occupancy_votes, reportedBy, reportedBy),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            ReportMark(reportedBy, size = 28.dp)
+                        }
                         if (reportedMinutes != null) {
                             Text(
                                 if (reportedMinutes == 0) stringResource(R.string.report_made_now)

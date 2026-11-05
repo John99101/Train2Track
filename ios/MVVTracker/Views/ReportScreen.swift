@@ -30,7 +30,9 @@ struct ReportScreen: View {
     private static let reportRed = Color(red: 0.86, green: 0.16, blue: 0.16)
 
     /// Is there a current report on this journey (the same rule as the "!" in the Feed)?
-    private var flagged: Bool { train.tripId.map(reports.flaggedTripIds.contains) ?? false }
+    /// How many riders report this journey (the colour of its "!"), nil when nobody does.
+    private var reportedBy: Int? { train.tripId.flatMap { reports.flaggedRiders[$0] } }
+    private var flagged: Bool { reportedBy != nil }
 
     /// The report state with time and station; nil while only this phone knows of
     /// the report (it was sent a moment ago).
@@ -73,12 +75,16 @@ struct ReportScreen: View {
                         Text(station).foregroundStyle(.secondary)
                         // A current report on this journey: the same "!" as in the
                         // Feed and on the Map.
-                        if flagged {
+                        if let reportedBy {
+                            // How many riders report it, so the colour is not the only sign.
+                            Text(loc.plural("occupancy_votes", reportedBy))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                             Text("!")
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(.white)
                                 .frame(width: 26, height: 26)
-                                .background(Self.reportRed, in: Circle())
+                                .background(Color(rgb: ReportColor.forRiders(reportedBy)), in: Circle())
                         }
                     }
                     // ... with when and where the newest report was made, on the right.

@@ -22,7 +22,8 @@ import MVVTrackerCore
 struct LiveTrainMapView: UIViewRepresentable {
     let trains: [TrainPosition]
     let routes: [String: LineRoute]
-    let flaggedTripIds: Set<String>
+    /// Reported trains, with how many riders report each (the colour of their "!").
+    let flaggedRiders: [String: Int]
     let showUserLocation: Bool
     /// Changes whenever the map should jump to a (new) city centre.
     let center: CLLocationCoordinate2D
@@ -184,14 +185,15 @@ struct LiveTrainMapView: UIViewRepresentable {
             var toAdd: [TrainAnnotation] = []
             var glides: [(TrainAnnotation, CLLocationCoordinate2D)] = []
             for (key, train) in shown {
-                let flagged = train.tripId.map(parent.flaggedTripIds.contains) ?? false
+                // The colour of the ring and the "!", nil when nobody reports it.
+                let report = train.tripId.flatMap { parent.flaggedRiders[$0] }.map(ReportColor.forRiders)
                 let target = CLLocationCoordinate2D(latitude: train.latitude, longitude: train.longitude)
                 if let a = annotations[key] {
                     let from = a.coordinate
-                    let styleChanged = a.flagged != flagged || a.train.label != train.label
+                    let styleChanged = a.report != report || a.train.label != train.label
                         || a.train.colorHex != train.colorHex || a.train.isRealtime != train.isRealtime
                     a.train = train
-                    a.flagged = flagged
+                    a.report = report
                     if abs(from.latitude - target.latitude) < snapDegrees && abs(from.longitude - target.longitude) < snapDegrees {
                         glides.append((a, target))
                     } else {
@@ -199,7 +201,7 @@ struct LiveTrainMapView: UIViewRepresentable {
                     }
                     if styleChanged, let v = map.view(for: a) as? TrainBadgeAnnotationView { v.apply(a, tier: tier) }
                 } else {
-                    let a = TrainAnnotation(train: train, flagged: flagged)
+                    let a = TrainAnnotation(train: train, report: report)
                     annotations[key] = a
                     toAdd.append(a)
                 }
@@ -289,11 +291,13 @@ struct LiveTrainMapView: UIViewRepresentable {
 final class TrainAnnotation: NSObject, MKAnnotation {
     @objc dynamic var coordinate: CLLocationCoordinate2D
     var train: TrainPosition
-    var flagged: Bool
+    /// The colour (0xRRGGBB) of its ring and "!", nil when nobody reports it.
+    var report: UInt32?
+    var flagged: Bool { report != nil }
 
-    init(train: TrainPosition, flagged: Bool) {
+    init(train: TrainPosition, report: UInt32?) {
         self.train = train
-        self.flagged = flagged
+        self.report = report
         self.coordinate = CLLocationCoordinate2D(latitude: train.latitude, longitude: train.longitude)
     }
 }
@@ -416,7 +420,7 @@ final class TrainBadgeAnnotationView: MKAnnotationView {
         // A reported vehicle keeps the full badge at every zoom.
         let size: BadgeTier = a.flagged ? .near : tier
         image = BadgeRenderer.image(label: t.label, color: UIColor(t.displayColor),
-                                    flagged: a.flagged, elongated: t.mode == "BUS" || t.mode == "TRAM", size: size)
+                                    report: a.report, elongated: t.mode == "BUS" || t.mode == "TRAM", size: size)
         alpha = a.flagged ? 1 : (t.isRealtime ? 0.85 : 0.4)
         // Higher is drawn on top: bus, tram, rail, S-Bahn and U-Bahn, reported.
         zPriority = MKAnnotationViewZPriority(rawValue: MKAnnotationViewZPriority.defaultUnselected.rawValue
@@ -429,30 +433,29 @@ final class TrainBadgeAnnotationView: MKAnnotationView {
 /// Same shapes and sizes as Android's `createBadgeBitmap` and `createDotBitmap`.
 enum BadgeRenderer {
     private static var cache: [String: UIImage] = [:]
-    private static let reportRed = UIColor(red: 220 / 255, green: 40 / 255, blue: 40 / 255, alpha: 1)
-    /// Room for the red ring and for the "!" that sticks out of the top right corner.
+    /// Room for the ring and for the "!" that sticks out of the top right corner.
     private static let reportMargin: CGFloat = 13.5
     /// The image of a dot is larger than the dot, so the dot can still be tapped.
     private static let dotSide: CGFloat = 20
 
     /// A badge in the size `size` asks for: full (`.near`), small (`.mid`) or a dot
     /// without a label (`.far`). A reported vehicle is always asked for in full size.
-    static func image(label: String, color: UIColor, flagged: Bool, elongated: Bool, size: BadgeTier) -> UIImage {
+    static func image(label: String, color: UIColor, report: UInt32?, elongated: Bool, size: BadgeTier) -> UIImage {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, al: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &al)
         let rgb = "\(Int(r * 255))-\(Int(g * 255))-\(Int(b * 255))"
         // A dot shows no label, so all lines of one colour share one image.
-        let key = size == .far ? "dot|\(rgb)|\(elongated)" : "\(rgb)|\(label)|\(flagged)|\(elongated)|\(size.rawValue)"
+        let key = size == .far ? "dot|\(rgb)|\(elongated)" : "\(rgb)|\(label)|\(report.map { String($0) } ?? "-")|\(elongated)|\(size.rawValue)"
         if let img = cache[key] { return img }
         let img = size == .far
             ? dot(color: color, elongated: elongated)
-            : badge(label: label, color: color, rgb: (r, g, b), flagged: flagged, elongated: elongated, small: size == .mid)
+            : badge(label: label, color: color, rgb: (r, g, b), report: report, elongated: elongated, small: size == .mid)
         cache[key] = img
         return img
     }
 
     private static func badge(label: String, color: UIColor, rgb: (CGFloat, CGFloat, CGFloat),
-                              flagged: Bool, elongated: Bool, small: Bool) -> UIImage {
+                              report: UInt32?, elongated: Bool, small: Bool) -> UIImage {
         let text = String(label.prefix(elongated ? 5 : 4))
         let font = UIFont.systemFont(ofSize: small ? 7 : 9, weight: .bold)
         let textSize = (text as NSString).size(withAttributes: [.font: font])
@@ -460,7 +463,7 @@ enum BadgeRenderer {
         let padH: CGFloat = elongated ? (small ? 5.5 : 8) : (small ? 2.5 : 3.5)
         let shapeW = max(textSize.width + 2 * padH, elongated ? height * 1.6 : height)
         // Room around the shape: for its outline, or for the ring and the "!" of a report.
-        let margin: CGFloat = flagged ? reportMargin : 3
+        let margin: CGFloat = report != nil ? reportMargin : 3
         let size = CGSize(width: shapeW + 2 * margin, height: height + 2 * margin)
         let corner: CGFloat = elongated ? height / 2 : (small ? 4.5 : 6)
         let outline: CGFloat = small ? 1.2 : 1.5
@@ -475,19 +478,20 @@ enum BadgeRenderer {
             let drawAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textLabelColor]
             (text as NSString).draw(at: CGPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2),
                                     withAttributes: drawAttrs)
-            guard flagged else { return }
+            guard let report else { return }
+            let reportColor = UIColor(Color(rgb: report))
 
-            // A red ring around the whole badge, just outside its white outline.
+            // A ring around the whole badge, just outside its white outline.
             let ringWidth: CGFloat = 2.5
             let out = outline / 2 + ringWidth / 2
             let ring = UIBezierPath(roundedRect: rect.insetBy(dx: -out, dy: -out), cornerRadius: corner + out)
-            reportRed.setStroke(); ring.lineWidth = ringWidth; ring.stroke()
+            reportColor.setStroke(); ring.lineWidth = ringWidth; ring.stroke()
 
             // The "!" on the top right corner, pushed outwards so it hides little of the label.
             let br: CGFloat = 9
             let centre = CGPoint(x: rect.maxX + 3, y: rect.minY - 3)
             let circle = UIBezierPath(ovalIn: CGRect(x: centre.x - br, y: centre.y - br, width: 2 * br, height: 2 * br))
-            reportRed.setFill(); circle.fill()
+            reportColor.setFill(); circle.fill()
             UIColor.white.setStroke(); circle.lineWidth = 1.5; circle.stroke()
             let bang = "!" as NSString
             let bangAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 13, weight: .heavy),

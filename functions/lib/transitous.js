@@ -18,7 +18,8 @@ const G = require("./lineGeometry");
 const { inRegion } = require("./cities");
 const { version } = require("../package.json");
 
-const BASE = "https://api.transitous.org";
+// The emulator tests point this at a stand-in (functions/.env.local, never deployed).
+const BASE = process.env.TRANSITOUS_BASE || "https://api.transitous.org";
 // transitous asks every client to say who it is (usage policy): name, version and
 // a contact. The version is the one in functions/package.json: raise it there with
 // every change to the server.
@@ -202,6 +203,26 @@ async function mapLimit(items, limit, fn) {
   });
   await Promise.all(workers);
   return results;
+}
+
+/**
+ * Start and end of a journey in epoch ms (real time where known), for the report
+ * check (lib/runningTrips.js). null when transitous does not know the journey (404)
+ * or the id is not valid (400). Throws when transitous does not answer, or answers
+ * without times: then the report counts.
+ */
+async function tripTimes(tripId) {
+  let r;
+  try {
+    r = await getJson("/api/v1/trip", { tripId }, 8000);
+  } catch (e) {
+    if (e.status === 404 || e.status === 400) return null;
+    throw e;
+  }
+  const startMs = Date.parse(r.startTime);
+  const endMs = Date.parse(r.endTime);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) throw new Error("transitous trip without times");
+  return { startMs, endMs };
 }
 
 /**
@@ -392,6 +413,6 @@ async function stopTimes(stopId, n = 30) {
 
 module.exports = {
   CITIES, SHOWN_MODES, ROUTE_MODES, USER_AGENT, LIVE_WINDOW, LIVE_STEP_MS,
-  shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, tripDetails, mapTrips,
+  shapeKey, lineColor, compactLive, fetchLive, fetchShapes, buildRoutes, tripRoute, tripDetails, tripTimes, mapTrips,
   searchStops, stopTimes, addStops, routeMaps, routeArrays,
 };

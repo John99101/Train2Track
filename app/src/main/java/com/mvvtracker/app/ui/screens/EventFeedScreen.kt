@@ -132,7 +132,7 @@ fun EventFeedScreen(
     onReportTrain: (line: String, tripId: String?, station: String?, mode: String?, city: String) -> Unit =
         { _, _, _, _, _ -> }
 ) {
-    val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
+    val flaggedRiders by eventsViewModel.flaggedRiders.collectAsStateWithLifecycle()
     val remoteCounts by eventsViewModel.remoteReportCounts.collectAsStateWithLifecycle()
     val delayVotes by eventsViewModel.delayVotes.collectAsStateWithLifecycle()
     val occupancy by eventsViewModel.occupancy.collectAsStateWithLifecycle()
@@ -178,7 +178,7 @@ fun EventFeedScreen(
     // A newly reported train moves to the top of the list. When the list is at (or
     // near) the top, follow it: otherwise the "!" would sit just above the visible
     // part, e.g. right after reporting a train and coming back.
-    LaunchedEffect(flaggedTripIds) {
+    LaunchedEffect(flaggedRiders.keys) {
         if (listState.firstVisibleItemIndex <= 2) listState.scrollToItem(0)
     }
 
@@ -221,11 +221,11 @@ fun EventFeedScreen(
     // (line OR current/destination station).
     //  - "Current reports" shows only flagged trains, most-reported first.
     //  - otherwise a reported train floats to the top.
-    val suTrains = remember(trains, flaggedTripIds, remoteCounts, modeFilters, selectedLine, query, seenTrains) {
+    val suTrains = remember(trains, flaggedRiders, remoteCounts, modeFilters, selectedLine, query, seenTrains) {
         val q = query.trim()
         val filtered = trains
             .filter { it.mode in FEED_MODES && modeFilters.allowsMode(it.mode) }
-            .filter { !reportsOnly || (it.tripId != null && it.tripId in flaggedTripIds) }
+            .filter { !reportsOnly || (it.tripId != null && it.tripId in flaggedRiders) }
             .filter { selectedLine == null || it.label == selectedLine }
             .filter {
                 q.isBlank() ||
@@ -242,7 +242,7 @@ fun EventFeedScreen(
             )
         } else {
             filtered.sortedWith(
-                compareByDescending<TrainPosition> { it.tripId != null && it.tripId in flaggedTripIds }
+                compareByDescending<TrainPosition> { it.tripId != null && it.tripId in flaggedRiders }
                     .thenBy { it.label }
                     .thenBy { it.toStop ?: "" }
             )
@@ -422,7 +422,7 @@ fun EventFeedScreen(
                 val delayConfirmCount = votes?.let { (c, o) -> if (c > o) c else 0 } ?: 0
                 TrainRow(
                     train = train,
-                    flagged = train.tripId != null && train.tripId in flaggedTripIds,
+                    reportedBy = train.tripId?.let { flaggedRiders[it] },
                     seen = train.tripId != null && train.tripId in seenTrains,
                     delayConfirmCount = delayConfirmCount,
                     occupancyLevel = train.tripId?.let { occupancy[it]?.level },
@@ -577,7 +577,8 @@ private fun FilterModeItem(mode: String, selected: Boolean, onClick: () -> Unit)
 @Composable
 private fun TrainRow(
     train: TrainPosition,
-    flagged: Boolean,
+    // How many riders report it (the colour of its "!"), null when nobody does.
+    reportedBy: Int?,
     seen: Boolean,
     delayConfirmCount: Int = 0,
     // How full it is (riders' votes, 1 to 5), null when fewer than two riders answered.
@@ -635,9 +636,9 @@ private fun TrainRow(
                     }
                 }
             }
-            if (flagged) {
+            if (reportedBy != null) {
                 Spacer(Modifier.width(8.dp))
-                ReportMark()
+                ReportMark(reportedBy)
                 // Quick "buy a valid ticket" shortcut on reported trains: opens the
                 // selected city's operator ticket page.
                 IconButton(onClick = onBuyTicket) {

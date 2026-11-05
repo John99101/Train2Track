@@ -83,7 +83,7 @@ fun MapScreen(
     onStationClick: (StationRef) -> Unit = {}
 ) {
     // Trains a rider has reported: the map marks them with a "!" corner badge.
-    val flaggedTripIds by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
+    val flaggedRiders by eventsViewModel.flaggedRiders.collectAsStateWithLifecycle()
     val selectedCity by citySelectionViewModel.selectedCity.collectAsStateWithLifecycle()
     val preciseLocation by settingsViewModel.preciseLocationConsent.collectAsStateWithLifecycle(initialValue = false)
 
@@ -119,7 +119,7 @@ fun MapScreen(
             centerLat = selectedCity.latitude,
             centerLon = selectedCity.longitude,
             modeFilter = modeFilter,
-            flaggedTripIds = flaggedTripIds,
+            flaggedRiders = flaggedRiders,
             showUserLocation = preciseLocation,
             onTrainClick = onTrainClick,
             topInset = FILTER_ROWS_HEIGHT,

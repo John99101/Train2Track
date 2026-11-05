@@ -37,12 +37,12 @@ final class ReportCountsViewModel: ObservableObject {
     /// What the "!" shows per train (0 = not flagged).
     var counts: [String: Int] { trips.mapValues(\.flagged) }
 
-    /// Trains flagged with a "!": those reported by enough riders across all
-    /// devices (server rules), plus this device's own recent report for instant
-    /// feedback. Exactly Android's `flaggedTripIds = local + remote`.
-    var flaggedTripIds: Set<String> {
-        let remote = Set(trips.filter { $0.value.flagged >= ReportKey.minCorroborations }.keys)
-        return remote.union(own.activeTripIds())
+    /// Trains flagged with a "!", with how many riders report each: those reported
+    /// by enough riders across all devices (server rules), plus this device's own
+    /// recent report until the train's reports are loaded
+    /// (`ReportAggregation.flaggedTrips`, as on Android).
+    var flaggedRiders: [String: Int] {
+        ReportAggregation.flaggedTrips(trips, ownActive: own.activeTripIds(), minReports: ReportKey.minCorroborations)
     }
 
     /// Confirmations to show for a trip — only when more riders confirm a delay than

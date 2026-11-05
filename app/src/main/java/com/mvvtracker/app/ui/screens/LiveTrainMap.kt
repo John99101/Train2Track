@@ -58,6 +58,7 @@ import com.mvvtracker.app.data.live.LineRoute
 import com.mvvtracker.app.data.live.routeKey
 import com.mvvtracker.app.data.station.MapStation
 import com.mvvtracker.app.ui.components.ReportRed
+import com.mvvtracker.app.ui.components.reportColor
 import com.mvvtracker.app.viewmodel.LiveMapViewModel
 import com.mvvtracker.app.viewmodel.MapStationSet
 import com.mvvtracker.app.viewmodel.TrainPosition
@@ -180,7 +181,8 @@ fun LiveTrainMap(
     centerLat: Double,
     centerLon: Double,
     modeFilter: Set<String>?,
-    flaggedTripIds: Set<String>,
+    // Reported trains, with how many riders report each (the colour of their "!").
+    flaggedRiders: Map<String, Int>,
     showUserLocation: Boolean = false,
     // Room taken by controls on top of the map (the filter buttons): the notes start below it.
     topInset: Dp = 0.dp,
@@ -367,11 +369,11 @@ fun LiveTrainMap(
     // chip below can step through them. (Recomputed with every position tick.)
     val reportsInView =
         // (No reports, or the map has no size yet: nothing to look for.)
-        if (flaggedTripIds.isEmpty() || mapView.width == 0) emptyList()
+        if (flaggedRiders.isEmpty() || mapView.width == 0) emptyList()
         else {
             val visibleBox = mapView.boundingBox
             shown
-                .filter { it.tripId != null && it.tripId in flaggedTripIds && visibleBox.contains(it.latitude, it.longitude) }
+                .filter { it.tripId != null && it.tripId in flaggedRiders && visibleBox.contains(it.latitude, it.longitude) }
                 .sortedBy { it.tripId }
         }
     val lastJump = remember { mutableStateOf<String?>(null) }
@@ -483,7 +485,10 @@ fun LiveTrainMap(
                 var orderChanged = false
                 glides.clear()
                 shownByKey.forEach { (key, train) ->
-                    val flagged = train.tripId != null && train.tripId in flaggedTripIds
+                    val riders = train.tripId?.let { flaggedRiders[it] }
+                    val flagged = riders != null
+                    // The colour of the ring and the "!", null when nobody reports it.
+                    val report = riders?.let { reportColor(it).toArgb() }
                     // A reported vehicle keeps the full badge at every zoom.
                     val size = if (flagged) ZoomTier.NEAR else tier
                     val rank = drawRank(train.mode, flagged)
@@ -503,11 +508,11 @@ fun LiveTrainMap(
                         // Keep the live/schedule-only fade in sync (cheap — no bitmap
                         // re-render), in case the trip gains or loses its real-time feed.
                         marker.alpha = badgeAlpha(train, flagged)
-                        // Re-render the badge only when the report state flips or the
+                        // Re-render the badge only when the report colour changes or the
                         // zoom asks for another size.
-                        if (existing.flagged != flagged || existing.size != size) {
-                            marker.icon = trainBadgeFor(context, train, flagged, size)
-                            existing.flagged = flagged
+                        if (existing.report != report || existing.size != size) {
+                            marker.icon = trainBadgeFor(context, train, report, size)
+                            existing.report = report
                             existing.size = size
                         }
                         if (existing.rank != rank) {
@@ -519,8 +524,8 @@ fun LiveTrainMap(
                             true
                         }
                     } else {
-                        val m = trainMarker(mv, context, train, flagged, size, onTrainClick)
-                        badges[key] = Badge(key, m, flagged, size, rank)
+                        val m = trainMarker(mv, context, train, report, size, onTrainClick)
+                        badges[key] = Badge(key, m, report, size, rank)
                         orderChanged = true
                     }
                 }
@@ -646,7 +651,7 @@ private fun trainKey(t: TrainPosition): String =
 private class Glide(val fromLat: Double, val fromLon: Double, val toLat: Double, val toLon: Double)
 
 /** A vehicle's marker and how it is drawn right now. */
-private class Badge(val key: String, val marker: Marker, var flagged: Boolean, var size: ZoomTier, var rank: Int)
+private class Badge(val key: String, val marker: Marker, var report: Int?, var size: ZoomTier, var rank: Int)
 
 /** What the map's update block last applied, so it only restyles when something changed. */
 private class DrawnStyle {
@@ -841,13 +846,14 @@ private const val SELECTED_EXTRA_DP = 1.5f
 private const val LINE_TAP_DP = 14f
 
 /** The badge drawable for a train: line colour, rounded-square (rail) or pill
- *  (bus/tram), in the size the zoom asks for; with a red ring and "!" when [flagged]. */
-private fun trainBadgeFor(context: Context, train: TrainPosition, flagged: Boolean, size: ZoomTier): Drawable =
+ *  (bus/tram), in the size the zoom asks for; with a ring and "!" in the [report]
+ *  colour when riders report it. */
+private fun trainBadgeFor(context: Context, train: TrainPosition, report: Int?, size: ZoomTier): Drawable =
     trainBadge(
         context,
         trainColorArgb(train.colorHex, train.label, train.mode),
         train.label,
-        flagged,
+        report,
         train.mode == "BUS" || train.mode == "TRAM",
         size
     )
@@ -926,15 +932,15 @@ private fun trainMarker(
     mapView: MapView,
     context: Context,
     train: TrainPosition,
-    flagged: Boolean,
+    report: Int?,
     size: ZoomTier,
     onTrainClick: (String, String?, String?, String?, String) -> Unit
 ): Marker {
     return Marker(mapView).apply {
         position = GeoPoint(train.latitude, train.longitude)
         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-        icon = trainBadgeFor(context, train, flagged, size)
-        alpha = badgeAlpha(train, flagged)
+        icon = trainBadgeFor(context, train, report, size)
+        alpha = badgeAlpha(train, report != null)
         title = train.label
         relatedObject = TRAIN_TAG
         // Tapping a train opens the Report screen for exactly that train.
@@ -979,14 +985,14 @@ private val MUNICH_LINE_COLORS: Map<String, Int> = mapOf(
 private val badgeBitmaps = HashMap<String, Bitmap>()
 
 private fun trainBadge(
-    context: Context, color: Int, label: String, flagged: Boolean, elongated: Boolean, size: ZoomTier
+    context: Context, color: Int, label: String, report: Int?, elongated: Boolean, size: ZoomTier
 ): Drawable {
     // A dot shows no label, so all lines of one colour share one bitmap.
-    val key = if (size == ZoomTier.FAR) "dot|$color|$elongated" else "$color|$label|$flagged|$elongated|$size"
+    val key = if (size == ZoomTier.FAR) "dot|$color|$elongated" else "$color|$label|$report|$elongated|$size"
     val bitmap = badgeBitmaps.getOrPut(key) {
         val density = context.resources.displayMetrics.density
         if (size == ZoomTier.FAR) createDotBitmap(density, color, elongated)
-        else createBadgeBitmap(density, color, label, flagged, elongated, small = size == ZoomTier.MID)
+        else createBadgeBitmap(density, color, label, report, elongated, small = size == ZoomTier.MID)
     }
     return BitmapDrawable(context.resources, bitmap)
 }
@@ -995,10 +1001,11 @@ private fun trainBadge(
  * A line badge: a **rounded square** for rail (S-/U-Bahn and other trains) or an
  * **elongated roundel** (pill) for bus/tram. Sized to the label so longer bus
  * numbers still fit; [small] is the size for a map that is zoomed out a little. A
- * reported trip ([flagged]) gets a red ring around the whole badge and a red "!".
+ * reported trip gets a ring around the whole badge and a "!", both in its [report]
+ * colour (how many riders report it, see reportColor).
  */
 private fun createBadgeBitmap(
-    density: Float, color: Int, label: String, flagged: Boolean, elongated: Boolean, small: Boolean
+    density: Float, color: Int, label: String, report: Int?, elongated: Boolean, small: Boolean
 ): Bitmap {
     val text = label.take(if (elongated) 5 else 4)
 
@@ -1012,7 +1019,7 @@ private fun createBadgeBitmap(
     val padH = (if (elongated) (if (small) 5.5f else 8f) else (if (small) 2.5f else 3.5f)) * density
     val shapeW = (paint.measureText(text) + 2f * padH).coerceAtLeast(if (elongated) height * 1.6f else height)
     // Room around the shape: for its outline, or for the ring and the "!" of a report.
-    val margin = (if (flagged) REPORT_MARGIN_DP else 3f) * density
+    val margin = (if (report != null) REPORT_MARGIN_DP else 3f) * density
     val bmpW = (shapeW + 2f * margin).toInt().coerceAtLeast(1)
     val bmpH = (height + 2f * margin).toInt().coerceAtLeast(1)
 
@@ -1038,13 +1045,13 @@ private fun createBadgeBitmap(
     val fm = paint.fontMetrics
     canvas.drawText(text, cx, cy - (fm.ascent + fm.descent) / 2f, paint)
 
-    if (flagged) {
-        // A red ring around the whole badge, just outside its white outline.
+    if (report != null) {
+        // A ring around the whole badge, just outside its white outline.
         val ringWidth = 2.5f * density
         val out = outline / 2f + ringWidth / 2f
         val ring = RectF(rect.left - out, rect.top - out, rect.right + out, rect.bottom + out)
         paint.style = Paint.Style.STROKE
-        paint.color = REPORT_RED
+        paint.color = report
         paint.strokeWidth = ringWidth
         canvas.drawRoundRect(ring, corner + out, corner + out, paint)
 
@@ -1088,7 +1095,6 @@ private fun createDotBitmap(density: Float, color: Int, elongated: Boolean): Bit
     return bitmap
 }
 
-private val REPORT_RED = ReportRed.toArgb()
-// Room for the red ring and for the "!" that sticks out of the top right corner.
+// Room for the ring and for the "!" that sticks out of the top right corner.
 private const val REPORT_MARGIN_DP = 13.5f
 private const val DOT_TAP_DP = 20f

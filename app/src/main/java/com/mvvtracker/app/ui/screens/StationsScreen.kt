@@ -214,7 +214,7 @@ fun StationScreen(
         onStopOrDispose { viewModel.pause() }
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val flagged by eventsViewModel.flaggedTripIds.collectAsStateWithLifecycle()
+    val flagged by eventsViewModel.flaggedRiders.collectAsStateWithLifecycle()
     val occupancy by eventsViewModel.occupancy.collectAsStateWithLifecycle()
     // Minutes until departure count down on the phone between two loads.
     val nowMs by produceState(System.currentTimeMillis()) {
@@ -269,7 +269,7 @@ fun StationScreen(
                         DepartureRow(
                             dep = dep,
                             nowMs = nowMs,
-                            flagged = dep.tripId.isNotBlank() && dep.tripId in flagged,
+                            reportedBy = dep.tripId.takeIf { it.isNotBlank() }?.let { flagged[it] },
                             occupancyLevel = occupancy[dep.tripId]?.level,
                             onClick = if (dep.tripId.isBlank()) null
                             else ({ onOpenTrain(dep.label, dep.tripId, board.name.ifBlank { station.name }, dep.mode, station.cityId) })
@@ -284,7 +284,7 @@ fun StationScreen(
 }
 
 @Composable
-private fun DepartureRow(dep: Departure, nowMs: Long, flagged: Boolean, occupancyLevel: Int?, onClick: (() -> Unit)?) {
+private fun DepartureRow(dep: Departure, nowMs: Long, reportedBy: Int?, occupancyLevel: Int?, onClick: (() -> Unit)?) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -330,9 +330,9 @@ private fun DepartureRow(dep: Departure, nowMs: Long, flagged: Boolean, occupanc
                 if (occupancyLevel != null) OccupancyMeter(occupancyLevel, segmentWidth = 5.dp, height = 7.dp)
             }
         }
-        if (flagged) {
+        if (reportedBy != null) {
             Spacer(Modifier.width(6.dp))
-            ReportMark(size = 20.dp)
+            ReportMark(reportedBy, size = 20.dp)
         }
         Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {

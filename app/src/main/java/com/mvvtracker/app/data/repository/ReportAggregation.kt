@@ -60,6 +60,18 @@ object ReportAggregation {
     fun aggregate(docs: List<ReportDoc>, nowMs: Long): Map<String, TripReports> =
         docs.groupBy { it.tripId }.mapValues { (tripId, all) -> forTrip(tripId, all, nowMs) }
 
+    /**
+     * The trains that show a "!" on this phone: those [trips] flags with at least
+     * [minReports] riders, plus this phone's own active reports ([ownActive]) on
+     * trains whose reports are not loaded yet (just sent, offline, another city).
+     * Once a train's reports are loaded they decide alone, so two "has left" votes
+     * clear it on the reporter's phone too. Each train comes with how many riders
+     * report it (the colour of its "!"); an own report not loaded yet counts as 1.
+     */
+    fun flaggedTrips(trips: Map<String, TripReports>, ownActive: Set<String>, minReports: Int): Map<String, Int> =
+        trips.filterValues { it.flagged >= minReports }.mapValues { it.value.flagged } +
+            (ownActive - trips.keys).associateWith { 1 }
+
     private fun forTrip(tripId: String, all: List<ReportDoc>, nowMs: Long): TripReports {
         val live = all.filter { it.expiresAtMs == null || it.expiresAtMs > nowMs }
         val valid = live.filter { !it.dismissed && !it.throttled }

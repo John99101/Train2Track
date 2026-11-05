@@ -148,7 +148,7 @@ struct FeedScreen: View {
     /// S-Bahn + U-Bahn only, de-duplicated, flagged trains floated to the top,
     /// then by label and destination. Mirrors `suTrains` in EventFeedScreen.kt.
     private var suTrains: [TrainPosition] {
-        let flagged = reports.flaggedTripIds
+        let flagged = Set(reports.flaggedRiders.keys)
         let counts = reports.counts
         let q = query.trimmingCharacters(in: .whitespaces)
         var seen = Set<String>()
@@ -366,7 +366,7 @@ struct FeedScreen: View {
             List(suTrains) { train in
                 TrainRow(
                     train: train,
-                    flagged: train.tripId.map(reports.flaggedTripIds.contains) ?? false,
+                    reportedBy: train.tripId.flatMap { reports.flaggedRiders[$0] },
                     delayConfirmCount: reports.delayConfirmCount(for: train.tripId),
                     occupancyLevel: train.tripId.flatMap { reports.occupancy[$0]?.level },
                     onBuyTicket: { if let url = URL(string: selectedCity.ticketURL) { openURL(url) } }
@@ -402,7 +402,8 @@ struct FeedScreen: View {
 private struct TrainRow: View {
     @EnvironmentObject private var loc: LocalizationManager
     let train: TrainPosition
-    let flagged: Bool
+    /// How many riders report it (the colour of its "!"), nil when nobody does.
+    let reportedBy: Int?
     var delayConfirmCount: Int = 0
     /// How full it is (riders' votes, 1 to 5), nil when fewer than two riders answered.
     var occupancyLevel: Int? = nil
@@ -449,12 +450,12 @@ private struct TrainRow: View {
 
             Spacer()
 
-            if flagged {
+            if let reportedBy {
                 Text("!")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(width: 24, height: 24)
-                    .background(Color(red: 0.86, green: 0.16, blue: 0.16), in: Circle())
+                    .background(Color(rgb: ReportColor.forRiders(reportedBy)), in: Circle())
                 // Quick "buy a valid ticket" shortcut on reported trains.
                 Button(action: onBuyTicket) {
                     Image(systemName: "ticket")

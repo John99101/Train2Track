@@ -59,7 +59,7 @@ struct MapScreen: View {
             LiveTrainMapView(
                 trains: shownTrains,
                 routes: vm.routes,
-                flaggedTripIds: reports.flaggedTripIds,
+                flaggedRiders: reports.flaggedRiders,
                 showUserLocation: consent.preciseLocationConsent,
                 center: CLLocationCoordinate2D(latitude: citySelection.city.latitude,
                                                longitude: citySelection.city.longitude),

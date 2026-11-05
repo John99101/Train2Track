@@ -1,6 +1,8 @@
 // Checks the hidden names of reports and delay votes (lib/reportIds.js) against
-// the real rules and functions, on the local emulators. Nothing here can reach
-// the live project: it runs under the made up project "demo-t2t".
+// the real rules and functions, on the local emulators, and that "on board" only
+// counts on a journey running now. Nothing here can reach the live project: it runs
+// under the made up project "demo-t2t", and the timetable service is a stand-in
+// (functions/.env.local points the emulator at it).
 //
 // From the repo root (needs Java 21 or newer for the emulators):
 //   firebase emulators:exec --only auth,firestore,functions --project demo-t2t "node functions/test/hidden_names.test.js"
@@ -136,6 +138,17 @@ const occupancy = (uid, tripId, level, extra = {}) => ({
   expiresAt: new Date(Date.now() + 20 * 60 * 1000), ...extra,
 });
 
+// Stand-in for the timetable service on the port in functions/.env.local: every
+// journey runs, except one named "notrunning" (not found) or "outage" (no answer).
+const timetable = require("http").createServer((req, res) => {
+  const tripId = new URL(req.url, "http://localhost").searchParams.get("tripId") || "";
+  if (tripId.includes("outage")) { res.writeHead(503); return res.end("{}"); }
+  if (tripId.includes("notrunning")) { res.writeHead(404); return res.end('{"error":"trip not found"}'); }
+  const now = Date.now();
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ startTime: new Date(now - 10 * 60000).toISOString(), endTime: new Date(now + 30 * 60000).toISOString() }));
+});
+
 const results = [];
 async function test(name, fn) {
   try {
@@ -148,6 +161,7 @@ async function test(name, fn) {
 }
 
 (async () => {
+  await new Promise((resolve) => timetable.listen(9399, "127.0.0.1", resolve));
   const run = Date.now().toString(36);
   const A = `riderA${run}`, B = `riderB${run}`, C = `riderC${run}`;
   const trip = (n) => `20261013_08:1${n}_de-DELFI_${run}|${n}`; // has characters a name may not contain
@@ -297,9 +311,41 @@ async function test(name, fn) {
     assert.ok(await read(ADMIN, `reports/${hiddenDocId(A, trip(1))}`), "other riders are not touched");
   });
 
+  // A new rider, far from the spam limit. A report without a city gets "unknown" from
+  // the server in the same update as any mark: once it is there, the server is done.
+  const D = `riderD${run}`;
+  const withoutCity = ({ city, ...rest }) => rest;
+  const doneWith = (tripId) => eventually(`server done with ${tripId}`, async () => {
+    const doc = await read(ADMIN, `reports/${hiddenDocId(D, tripId)}`);
+    return doc && doc.city === "unknown" ? doc : null;
+  });
+  await test("server: \"on board\" on a journey running now counts", async () => {
+    const t = `${trip(7)}_running`;
+    assert.strictEqual(await writeHidden(token(D), "reports", D, withoutCity(hiddenReport(D, t))), true);
+    assert.notStrictEqual((await doneWith(t)).throttled, true);
+  });
+  await test("server: \"on board\" on a journey not running now is marked and does not count", async () => {
+    const t = `${trip(7)}_notrunning`;
+    assert.strictEqual(await writeHidden(token(D), "reports", D, withoutCity(hiddenReport(D, t))), true);
+    assert.strictEqual((await doneWith(t)).throttled, true);
+  });
+  await test("server: \"has left\" is not checked", async () => {
+    const t = `${trip(8)}_notrunning`;
+    assert.strictEqual(await writeHidden(token(D), "reports", D, withoutCity(hiddenReport(D, t, "exited"))), true);
+    assert.notStrictEqual((await doneWith(t)).throttled, true);
+  });
+  await test("server: when the timetable service does not answer, the report counts", async () => {
+    const t = `${trip(7)}_outage`;
+    assert.strictEqual(await writeHidden(token(D), "reports", D, withoutCity(hiddenReport(D, t))), true);
+    assert.notStrictEqual((await doneWith(t)).throttled, true);
+  });
+
+  timetable.closeAllConnections();
+  timetable.close();
   console.log(results.join("\n"));
   console.log(process.exitCode ? "\nFAILED" : "\nall passed");
 })().catch((e) => {
+  timetable.close();
   console.log(results.join("\n"));
   console.error("test run failed:", e.message);
   process.exit(1);

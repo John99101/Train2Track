@@ -69,6 +69,19 @@ public enum ReportAggregation {
         }
     }
 
+    /// The trains that show a "!" on this phone: those `trips` flags with at least
+    /// `minReports` riders, plus this phone's own active reports (`ownActive`) on
+    /// trains whose reports are not loaded yet (just sent, offline, another city).
+    /// Once a train's reports are loaded they decide alone, so two "has left" votes
+    /// clear it on the reporter's phone too. Each train comes with how many riders
+    /// report it (the colour of its "!", `ReportColor`); an own report not loaded yet
+    /// counts as 1. Port of Android's `flaggedTrips`.
+    public static func flaggedTrips(_ trips: [String: TripReports], ownActive: Set<String>, minReports: Int) -> [String: Int] {
+        var riders = trips.filter { $0.value.flagged >= minReports }.mapValues(\.flagged)
+        for id in ownActive where trips[id] == nil { riders[id] = 1 }
+        return riders
+    }
+
     private static func forTrip(_ tripId: String, _ all: [ReportDoc], nowMs: Int64) -> TripReports {
         let live = all.filter { $0.expiresAtMs == nil || $0.expiresAtMs! > nowMs }
         let valid = live.filter { !$0.dismissed && !$0.throttled }

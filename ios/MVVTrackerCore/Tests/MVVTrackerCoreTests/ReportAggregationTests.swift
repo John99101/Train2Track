@@ -40,6 +40,24 @@ final class ReportAggregationTests: XCTestCase {
         XCTAssertEqual(0, flagged(exit("a", now - 1000)))
     }
 
+    // 5 November 2026: two "has left" from others cleared the train on every phone but the reporter's.
+    func testOwnReportFollowsTheSharedCountOnceTheTrainIsLoaded() {
+        let trips = ReportAggregation.aggregate([entry("me", now - 5000), exit("b", now - 2000), exit("c", now - 1000)], nowMs: now)
+        XCTAssertEqual([:], ReportAggregation.flaggedTrips(trips, ownActive: [trip], minReports: 1))
+    }
+
+    func testOwnReportShowsWhileTheTrainIsNotLoadedYet() {
+        let trips = ReportAggregation.aggregate([entry("a", now - 5000)], nowMs: now)
+        XCTAssertEqual([trip: 1, "T2": 1], ReportAggregation.flaggedTrips(trips, ownActive: ["T2"], minReports: 1))
+        XCTAssertEqual(["T2": 1], ReportAggregation.flaggedTrips([:], ownActive: ["T2"], minReports: 1))
+    }
+
+    func testFlaggedTrainsCarryHowManyRidersReportThem() {
+        let trips = ReportAggregation.aggregate([entry("a", now - 5000), entry("b", now - 4000), entry("c", now - 3000)], nowMs: now)
+        XCTAssertEqual([trip: 3], ReportAggregation.flaggedTrips(trips, ownActive: [trip], minReports: 1))
+        XCTAssertEqual([:], ReportAggregation.flaggedTrips(trips, ownActive: [], minReports: 4))
+    }
+
     func testExitsOlderThanANewEntryDoNotCount() {
         XCTAssertEqual(1, flagged(exit("b", now - 9000), exit("c", now - 8000), entry("a", now - 1000)))
     }

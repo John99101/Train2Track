@@ -3,12 +3,13 @@
   <img src="docs/images/banner.png" alt="Train2Track: live public transport in Germany" width="720">
 </p>
 
-<h3 align="center">Every S-Bahn, U-Bahn, tram and bus of nine German cities, moving live on your phone.</h3>
+<h3 align="center">Every S-Bahn, U-Bahn, tram and bus of eleven German cities, moving live on your phone.</h3>
 
 <p align="center">
   <a href="LICENSE"><img alt="Licence: AGPL 3.0" src="https://img.shields.io/badge/licence-AGPL%203.0-b71c1c"></a>
   <img alt="Platforms: Android and iOS" src="https://img.shields.io/badge/platforms-Android%20%7C%20iOS-333333">
-  <img alt="Release: October 2026" src="https://img.shields.io/badge/release-October%202026-2e7d32">
+  <img alt="iOS: in the App Store" src="https://img.shields.io/badge/iOS-App%20Store-2e7d32">
+  <img alt="Android: Google Play soon" src="https://img.shields.io/badge/Android-Google%20Play%20soon-777777">
   <img alt="No account needed" src="https://img.shields.io/badge/account-not%20needed-555555">
   <br>
   <img alt="Kotlin and Jetpack Compose" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white">
@@ -28,7 +29,7 @@
 
 # Train2Track
 
-Train2Track shows public transport in nine German cities as it moves: S-Bahn, U-Bahn,
+Train2Track shows public transport in eleven German cities as it moves: S-Bahn, U-Bahn,
 trams, buses and regional trains, on a map and as a list, with delays and disruption
 notices. Riders can also tell each other that a ticket inspection is taking place on a
 journey, as a reminder to keep a valid ticket ready.
@@ -38,7 +39,7 @@ who you are. This repository holds the source code of the Android app, the iOS a
 the server.
 
 <p align="center">
-  <b>9</b> cities &nbsp;·&nbsp; <b>5</b> kinds of transport &nbsp;·&nbsp; <b>20 s</b> between live updates &nbsp;·&nbsp; <b>0</b> accounts needed &nbsp;·&nbsp; <b>2</b> languages
+  <b>11</b> cities &nbsp;·&nbsp; <b>5</b> kinds of transport &nbsp;·&nbsp; <b>20 s</b> between live updates &nbsp;·&nbsp; <b>0</b> accounts needed &nbsp;·&nbsp; <b>2</b> languages
 </p>
 
 <table align="center">
@@ -58,7 +59,7 @@ the server.
 | **Feed** | All lines of a city as a live list, with search and filters for S-Bahn, U-Bahn, tram, bus and rail. |
 | **Delays** | Shown per journey where the data sources provide live data. Otherwise the journey is marked as scheduled. |
 | **Disruptions** | Notices from open data, for the selected city. |
-| **Reports** | "On board" marks a journey on which a ticket inspection is taking place. "Has left" ends it. Riders can also vote whether a journey is late and how full it is. |
+| **Reports** | "On board" marks a journey on which a ticket inspection is taking place, with a "!". Its colour shows how many riders report it: orange for one rider (not confirmed yet), light red from two, red from six, bright red from eleven. The journey page also shows the number. "Has left" from two riders ends it. Riders can also vote whether a journey is late and how full it is. |
 | **Stations** | Search a station and see its next departures, with reports and occupancy. |
 | **Ticket button** | Opens the ticket page of the local transport operator. |
 | **Line colours** | Lines appear in the colours riders know from the network maps, where these are known. |
@@ -76,9 +77,9 @@ be, not a measured position.
 
 ## Status
 
-Train2Track is in its final test on Google Play and TestFlight. The release in both
-stores is planned for the end of October 2026. It is a one person project, built and run
-in spare time.
+Train2Track has been in the [App Store](https://apps.apple.com/de/app/train2track/id6805807804)
+since 24 October 2026. On Google Play it is still in closed testing; the release there
+follows. It is a one person project, built and run in spare time.
 
 ## Privacy by design
 
@@ -93,6 +94,9 @@ What the code in this repository does, so that anyone can check it:
   [`firestore.rules`](firestore.rules).
 - **Location stays on the phone.** It only preselects the city and shows your
   position on the map. It is never sent to the server.
+- **Checking a report sends only the journey.** To see whether a reported journey is
+  running, the server asks Transitous with the journey number alone. See
+  [`functions/lib/runningTrips.js`](functions/lib/runningTrips.js).
 - **Nothing optional without consent.** Usage statistics are off until switched on
   (Android only, iOS has none). At present the app shows no advertising. If it does
   later, no advertisement is requested before Google's consent dialog has been answered.
@@ -123,6 +127,7 @@ flowchart LR
   A & I <-->|reports and votes| F
   F --- C
   H --> T
+  C -->|is the reported journey running?| T
   C --> G
   A & I --> M
   A & I -.->|only when the server is down<br>or outside the cities| T
@@ -132,13 +137,17 @@ flowchart LR
   compact snapshot. The apps calculate each vehicle's position from the snapshot and the
   track shapes.
 - **Line routes.** The server keeps the route of every line. It asks Transitous once
-  per line, tops the set up once a week with lines it does not have yet, and fetches a
+  per line, tops the set up once a day with lines it does not have yet, and fetches a
   missing line when an app first needs it. The apps never ask Transitous for a route.
   Long distance trains (ICE, IC, night trains) get no route line: they cross the whole
   country, and their position is enough.
 - **Reports.** The apps write reports and delay votes straight to Firestore. The rules
   in `firestore.rules` decide what an app may write. Cloud Functions apply the spam
-  limit and the moderation.
+  limit and the moderation, and count an "On board" report only while its journey is
+  running (with a margin before the start and after the end). The apps count the riders
+  per journey with the same rules on both platforms (`ReportAggregation`), and the
+  colours of the "!" are set in one place per app: `ui/components/ReportMark.kt` on
+  Android, `ReportColor.swift` in `ios/MVVTrackerCore`.
 - **Disruptions.** A scheduled function reads the open feed of gtfs.de and stores the
   current notices, so that no phone has to download the whole feed.
 
@@ -272,6 +281,9 @@ node functions/test/routes.test.js
 
 # Station search and departures of a station (no network needed)
 node functions/test/stations.test.js
+
+# "On board" reports only on journeys running now (no network needed)
+node functions/test/running.test.js
 
 # Rules and functions on the Firebase emulators (needs Java 21 or newer)
 firebase emulators:exec --only auth,firestore,functions --project demo-t2t "node functions/test/hidden_names.test.js && node functions/test/rules_more.test.js"

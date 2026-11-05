@@ -6,6 +6,7 @@ import com.mvvtracker.app.data.model.EventSource
 import com.mvvtracker.app.data.model.EventStatus
 import com.mvvtracker.app.data.model.SBahnEvent
 import com.mvvtracker.app.data.repository.EventRepository
+import com.mvvtracker.app.data.repository.ReportAggregation
 import com.mvvtracker.app.data.repository.TripReports
 import com.mvvtracker.app.data.repository.UserReportBackend
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,12 +37,13 @@ class EventsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
-     * Trains flagged with a "!" in the Feed and on the Map: those reported across
-     * all devices (Firestore, after the rules in ReportAggregation), plus this
-     * device's own recent report for instant feedback before it round-trips.
+     * Trains flagged with a "!" in the Feed and on the Map, with how many riders
+     * report each: those reported across all devices (Firestore, after the rules in
+     * ReportAggregation), plus this device's own recent report until the train's
+     * reports are loaded ([ReportAggregation.flaggedTrips]).
      */
-    val flaggedTripIds: StateFlow<Set<String>> =
-        combine(activeEvents, remoteReportCounts) { events, remoteCounts ->
+    val flaggedRiders: StateFlow<Map<String, Int>> =
+        combine(activeEvents, reportedTrips) { events, trips ->
             val cutoff = System.currentTimeMillis() - EventRepository.REPORT_TTL_MILLIS
             val local = events
                 .filter {
@@ -51,9 +53,8 @@ class EventsViewModel @Inject constructor(
                 }
                 .mapNotNull { it.tripId }
                 .toSet()
-            val remote = remoteCounts.filterValues { it >= MIN_CORROBORATIONS }.keys
-            local + remote
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+            ReportAggregation.flaggedTrips(trips, local, MIN_CORROBORATIONS)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
      * Live crowd delay tally per trip (Phase 6 / Option 2): tripId -> (confirm,

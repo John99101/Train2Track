@@ -25,7 +25,8 @@ const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestor
 const GtfsRealtimeBindings = require("gtfs-realtime-bindings");
 const { CITIES } = require("./lib/cities");
 const { createApi, rebuildCityRoutes } = require("./lib/liveApi");
-const { USER_AGENT } = require("./lib/transitous");
+const { USER_AGENT, tripTimes } = require("./lib/transitous");
+const { createRunningCheck } = require("./lib/runningTrips");
 const { isStaleAnonymous } = require("./lib/accounts");
 const { CITY_UNKNOWN, onlyServerFieldsChanged, sameValue } = require("./lib/reportFields");
 const { ADMIN_UIDS, syncAdminClaims } = require("./lib/admins");
@@ -140,6 +141,10 @@ exports.rebuildRoutes = onCall({ ...CALLABLE, timeoutSeconds: 540, memory: "512M
 
 // ---- Reports: spam limit + moderation -----------------------------------------
 
+// "On board" reports only count on journeys running now: one question per journey
+// to the timetable service, kept for 10 minutes (lib/runningTrips.js).
+const runningNow = createRunningCheck(tripTimes);
+
 /** Records one write for [uid] and says whether it is over the limit (lib/limits.js). */
 async function overLimit(uid, kind) {
   const ref = db.collection("rate_limits").doc(uid);
@@ -209,6 +214,16 @@ async function onRiderWrite(event, collection, limitKind) {
     const at = mod.exists && mod.get("dismissedAt");
     if (at && Date.now() - at.toMillis() < DISMISSAL_STICKY_MS && (mod.get("dismissedUids") || []).includes(owner.uid)) {
       updates.dismissed = true;
+    }
+    // "On board" only counts on a journey running now; otherwise it is marked like
+    // spam, which every app version ignores. "Has left" is never checked.
+    if (data.state !== "exited" && !updates.throttled && !updates.dismissed) {
+      try {
+        if (!(await runningNow(data.tripId))) updates.throttled = true;
+      } catch (e) {
+        // The timetable service did not answer: the report counts.
+        logger.warn(`running check ${data.tripId}: ${e.message}`);
+      }
     }
   }
 

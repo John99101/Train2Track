@@ -4,10 +4,10 @@ import MVVTrackerCore
 
 /// This device's own "on board" reports, kept locally like Android's Room event
 /// table (`EventRepository.submitUserReport`). The Feed and the Map flag a train
-/// when the server rules say so (`ReportAggregation`) OR when this device itself
-/// reported it within the report lifetime, exactly like Android's
-/// `flaggedTripIds = local + remote`. So a rider always sees their own "!" until
-/// they report "has left" or it expires, even before the write round-trips.
+/// when the server rules say so (`ReportAggregation`), and show this device's own
+/// report as long as the train's reports are not loaded yet (just sent, offline):
+/// see `ReportAggregation.flaggedTrips`. Once they are loaded they decide alone,
+/// so two "has left" votes of other riders clear the "!" here too.
 @MainActor
 final class OwnReportsStore: ObservableObject {
     static let shared = OwnReportsStore()

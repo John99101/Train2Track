@@ -138,7 +138,7 @@ struct StationScreen: View {
                 let train = trainPosition(dep, station: board.name.isEmpty ? station.name : board.name)
                 Button { if train.tripId != nil { selected = train } } label: {
                     DepartureRow(departure: dep, train: train, nowMs: nowMs,
-                                 flagged: dep.tripId.isEmpty ? false : reports.flaggedTripIds.contains(dep.tripId),
+                                 reportedBy: dep.tripId.isEmpty ? nil : reports.flaggedRiders[dep.tripId],
                                  occupancyLevel: reports.occupancy[dep.tripId]?.level)
                 }
                 .buttonStyle(.plain)
@@ -168,7 +168,8 @@ private struct DepartureRow: View {
     let departure: Departure
     let train: TrainPosition
     let nowMs: Int64
-    let flagged: Bool
+    /// How many riders report it (the colour of its "!"), nil when nobody does.
+    let reportedBy: Int?
     let occupancyLevel: Int?
 
     var body: some View {
@@ -203,12 +204,12 @@ private struct DepartureRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if flagged {
+            if let reportedBy {
                 Text("!")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(width: 20, height: 20)
-                    .background(Color(red: 0.86, green: 0.16, blue: 0.16), in: Circle())
+                    .background(Color(rgb: ReportColor.forRiders(reportedBy)), in: Circle())
             }
             VStack(alignment: .trailing, spacing: 2) {
                 let minutes = Int((departure.expectedAtMs - nowMs) / 60_000)

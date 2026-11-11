@@ -8,8 +8,8 @@
 <p align="center">
   <a href="LICENSE"><img alt="Licence: AGPL 3.0" src="https://img.shields.io/badge/licence-AGPL%203.0-b71c1c"></a>
   <img alt="Platforms: Android and iOS" src="https://img.shields.io/badge/platforms-Android%20%7C%20iOS-333333">
-  <img alt="iOS: in the App Store" src="https://img.shields.io/badge/iOS-App%20Store-2e7d32">
-  <img alt="Android: Google Play soon" src="https://img.shields.io/badge/Android-Google%20Play%20soon-777777">
+  <a href="https://apps.apple.com/de/app/train2track/id6805807804"><img alt="iOS: in the App Store" src="https://img.shields.io/badge/iOS-App%20Store-2e7d32"></a>
+  <a href="https://play.google.com/store/apps/details?id=com.mvvtracker.app"><img alt="Android: on Google Play" src="https://img.shields.io/badge/Android-Google%20Play-2e7d32"></a>
   <img alt="No account needed" src="https://img.shields.io/badge/account-not%20needed-555555">
   <br>
   <img alt="Kotlin and Jetpack Compose" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white">
@@ -78,8 +78,8 @@ be, not a measured position.
 ## Status
 
 Train2Track has been in the [App Store](https://apps.apple.com/de/app/train2track/id6805807804)
-since 24 October 2026. On Google Play it is still in closed testing; the release there
-follows. It is a one person project, built and run in spare time.
+since 24 October 2026 and on [Google Play](https://play.google.com/store/apps/details?id=com.mvvtracker.app)
+since November 2026. It is a one person project, built and run in spare time.
 
 ## Privacy by design
 
